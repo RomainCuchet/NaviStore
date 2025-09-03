@@ -1,16 +1,19 @@
 import json
+from collections import Counter
 
 
 class LeclercProductsAnalyser:
 
     @staticmethod
-    def display_product_stats(products):
+    def display_product_stats(products, is_analyse_categories=False):
         if not products:
             print("No products available.")
             return
 
         total_products = len(products)
         brands = set(p["brand"] for p in products if p["brand"])
+
+        # Averages calculated only on valid products
         avg_first_price = (
             sum(
                 p["first_product_price"]
@@ -55,6 +58,16 @@ class LeclercProductsAnalyser:
         print(f"Average second product price: €{avg_second_price:.2f}")
         print(f"Lowest first product price: €{min_first_price:.2f}")
         print(f"Highest first product price: €{max_first_price:.2f}")
+
+        if is_analyse_categories:
+
+            categories = [p.get("category", "default") for p in products]
+            counter = Counter(categories)
+
+            print("\n=== Category Stats ===")
+            print(f"Total categories: {len(counter)}")
+            for cat, count in counter.most_common():
+                print(f"- {cat}: {count} product(s)")
 
     @staticmethod
     def run(json_path="assets/products.json"):

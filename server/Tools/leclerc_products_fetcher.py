@@ -17,17 +17,17 @@ class LeclercProductsFetcher:
 
     @staticmethod
     def extract_price(product_div):
-        """Extrait le prix depuis un div produit, en utilisant aria-label ou les balises p."""
+        """Extracts the price from a product div, using aria-label or p tags."""
         if not product_div:
             return None
 
-        # Essayer d'extraire le prix depuis l'attribut aria-label
+        # Try to extract the price from the aria-label attribute
         aria_label = product_div.get("aria-label", "")
         match = re.search(r"(\d+[,\.]\d{2})", aria_label)
         if match:
             return float(match.group(1).replace(",", "."))
 
-        # Sinon, tenter de récupérer depuis les balises p
+        # Otherwise, try to get from p tags
         deci_tag = product_div.find("p", class_="price-deci")
         cents_tag = product_div.find("p", class_="price-cents")
         if deci_tag and cents_tag:
@@ -40,25 +40,39 @@ class LeclercProductsFetcher:
                 return None
         return None
 
+    @staticmethod
+    def get_category(case):
+        """Gets the product category from its parent 'category_xxx'."""
+        category_div = case.find_parent("div", id=re.compile(r"^category_"))
+        if category_div:
+            # Look for category header image
+            img_div = category_div.find("div", class_="img_div")
+            if img_div:
+                img_tag = img_div.find("img")
+                if img_tag and img_tag.get("alt"):
+                    # Clean 'Rayon XXX' if present
+                    alt_text = img_tag["alt"].strip()
+                    return re.sub(r"^Rayon\s+", "", alt_text)
+        return "default"
+
+    @staticmethod
     def fetch_products(html_path):
         with open(html_path, "r", encoding="utf-8") as f:
             soup = BeautifulSoup(f, "html.parser")
 
         articles = []
-
-        # Trouver tous les containers de produit
         product_cases = soup.find_all("div", id="product-case")
         for case in product_cases:
             product = {}
 
-            # Nom et marque
+            # Name and brand
             brand_tag = case.find("h3", class_="brand")
             product["brand"] = brand_tag.text.strip() if brand_tag else None
 
             title_tag = case.find("h4", class_="p-title")
             product["title"] = title_tag.text.strip() if title_tag else None
             if not product["title"]:
-                continue  # if title is empty don't add the product
+                continue
 
             # Image
             img_tag = case.find("img", id="product_img")
@@ -69,11 +83,10 @@ class LeclercProductsFetcher:
             product["packaging_type"] = (
                 packaging_type_div.text.strip() if packaging_type_div else None
             )
-
             if product["packaging_type"] == "Le 1er produit":
                 product["packaging_type"] = None
 
-            # Prix des produits
+            # Price
             first_product_div = case.find("div", id="first-product")
             second_product_div = case.find("div", id="second-product")
 
@@ -84,7 +97,7 @@ class LeclercProductsFetcher:
                 second_product_div
             )
 
-            # Prix au kilo si disponible
+            # Price per kilo
             packaging_div = case.find("div", id="packaging-price")
             if packaging_div:
                 match = re.search(
@@ -95,6 +108,9 @@ class LeclercProductsFetcher:
                 )
             else:
                 product["price_per_measurement_unit"] = None
+
+            # Category
+            product["category"] = LeclercProductsFetcher.get_category(case)
 
             articles.append(product)
 
