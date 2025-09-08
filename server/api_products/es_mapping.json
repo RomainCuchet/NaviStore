@@ -5,7 +5,8 @@
         "type": "text"
       },
       "title": {
-        "type": "text"
+        "type": "text",
+        "analyzer": "french"
       },
       "image_url": {
         "type": "keyword"
