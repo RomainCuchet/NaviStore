@@ -70,6 +70,22 @@ class LeclercProductsAnalyser:
                 print(f"- {cat}: {count} product(s)")
 
     @staticmethod
+    def fetch_categories(json_path="assets/products.json"):
+        categories = set()
+        try:
+            with open(json_path, "r", encoding="utf-8") as f:
+                products = json.load(f)
+            for p in products:
+                cat = p.get("category", "default")
+                if cat:
+                    categories.add(cat)
+        except FileNotFoundError:
+            print(f"File {json_path} not found.")
+        except json.JSONDecodeError:
+            print(f"Error decoding JSON from {json_path}.")
+        return categories
+
+    @staticmethod
     def run(json_path="assets/products.json"):
         """Load products from a JSON file and display stats."""
         try:

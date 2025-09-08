@@ -1,2 +1,3 @@
-from Tools.leclerc_products_fetcher import LeclercProductsFetcher
-from Tools.leclerc_products_analyser import LeclercProductsAnalyser
+from tools.leclerc_products_fetcher import LeclercProductsFetcher
+from tools.leclerc_products_analyser import LeclercProductsAnalyser
+from tools.api_key_generator import APIKeyGenerator
