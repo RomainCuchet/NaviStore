@@ -2,7 +2,7 @@
   "mappings": {
     "properties": {
       "brand": {
-        "type": "text"
+        "type": "keyword"
       },
       "title": {
         "type": "text",
@@ -24,7 +24,7 @@
         "type": "float"
       },
       "category": {
-        "type": "text"
+        "type": "keyword"
       }
     }
   }

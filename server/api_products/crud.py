@@ -57,40 +57,64 @@ def reindex_products():
         print("⚠️ products.json file not found, no products indexed")
 
 
-def search_products(query: str, fields: list = None, category_filter: str = None):
-    """Search for products by text and optionally filter by category."""
-    if category_filter:
-        body = {
-            "query": {
-                "bool": {
-                    "must": {
-                        "multi_match": {
-                            "query": query,
-                            "fields": ["brand", "title^2", "category"],
-                        }
-                    },
-                    "filter": {"term": {"category.keyword": category_filter}},
-                }
-            }
-        }
+def search_products(
+    title: str = None, brand: str = None, category: str = None, fields: list = None
+):
+    """
+    Search for products with flexible filtering logic - VERSION CORRIGÉE pour mapping keyword
+    """
+
+    # Validation
+    if not title and not brand and not category:
+        raise ValueError(
+            "Si aucun title n'est spécifié, au moins brand ou category doit être fourni"
+        )
+
+    # Construction de la requête
+    query_body = {"query": {"bool": {}}}
+
+    # Cas 1: Recherche par title avec filtres optionnels
+    if title:
+        query_body["query"]["bool"]["must"] = [
+            {"match": {"title": {"query": title, "analyzer": "french"}}}
+        ]
+
+        # Ajout des filtres exacts si spécifiés
+        filters = []
+        if brand:
+            filters.append({"term": {"brand": brand}})
+        if category:
+            filters.append({"term": {"category": category}})
+
+        if filters:
+            query_body["query"]["bool"]["filter"] = filters
+
+    # Cas 2: Pas de title, filtrer uniquement par brand et/ou category
     else:
-        body = {
-            "query": {
-                "multi_match": {
-                    "query": query,
-                    "fields": ["brand", "title^2", "category"],
-                }
-            }
-        }
+        filters = []
+        if brand:
+            # CORRECTION: brand est keyword, donc pas de .keyword
+            filters.append({"term": {"brand": brand}})
+        if category:
+            filters.append({"term": {"category": category}})
 
-    res = es.search(index=ES_INDEX, body=body)
-    hits = [hit["_source"] for hit in res["hits"]["hits"]]
+        query_body["query"]["bool"]["filter"] = filters
+        query_body["query"]["bool"]["must"] = [{"match_all": {}}]
 
-    # If `fields` is provided, only return those fields
-    if fields:
-        hits = [{k: v for k, v in hit.items() if k in fields} for hit in hits]
+    # Exécution de la requête
+    try:
+        res = es.search(index=ES_INDEX, body=query_body)
+        hits = [hit["_source"] for hit in res["hits"]["hits"]]
 
-    return hits
+        # Filtrage des champs si spécifié
+        if fields:
+            hits = [{k: v for k, v in hit.items() if k in fields} for hit in hits]
+
+        return hits
+
+    except Exception as e:
+        print(f"Erreur lors de la recherche: {e}")
+        return []
 
 
 # Ensure index exists at startup
