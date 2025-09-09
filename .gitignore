@@ -1,1 +1,3 @@
 __pycache__/
+test[0-9]*.py
+.env
