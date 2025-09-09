@@ -25,6 +25,8 @@ async def get_products(
 
     Accessible à tous (read et write).
     """
+    brand = brand.lower() if brand else brand
+    category = category.lower() if category else category
 
     # Validation : si pas de title, au moins brand ou category requis
     if not title and not brand and not category:
