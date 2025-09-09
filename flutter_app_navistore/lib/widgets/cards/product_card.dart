@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import '../../models/product.dart'; // Assure-toi que le Product model est importé
+import '../../models/product.dart';
 
 class ProductCard extends StatelessWidget {
   final Product product;
-  final bool strikeFields; // nouveau paramètre
+  final bool strikeFields;
 
   const ProductCard({
     super.key,
@@ -32,67 +32,95 @@ class ProductCard extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: SizedBox(
         height: 120,
-        child: Row(
+        child: Stack(
           children: [
-            Container(
-              width: 120,
-              decoration: BoxDecoration(
-                image: DecorationImage(
-                  image: AssetImage(product.imagePath),
-                  fit: BoxFit.cover,
+            Row(
+              children: [
+                // Image avec fallback
+                Container(
+                  width: 120,
+                  color: theme.colorScheme.surfaceVariant,
+                  child: Image.asset(
+                    product.imagePath,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Image.asset(
+                        'assets/icons/default_product_icon.png',
+                        fit: BoxFit.cover,
+                      );
+                    },
+                  ),
                 ),
-              ),
-            ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(12.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      product.name, // titre toujours normal
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: theme.colorScheme.onSurface,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      product.brand,
-                      style: strikeStyle(theme.textTheme.bodyMedium),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      product.category,
-                      style: strikeStyle(theme.textTheme.bodySmall),
-                    ),
-                    const Spacer(),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
+                        // Nom produit
                         Text(
-                          "${product.price.toStringAsFixed(2)} €",
-                          style:
-                              strikeStyle(theme.textTheme.titleSmall?.copyWith(
+                          product.name,
+                          style: theme.textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.bold,
-                            color: theme.colorScheme.primary,
-                          )),
+                            color: theme.colorScheme.onSurface,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        Icon(
-                          product.isAvailable
-                              ? Icons.check_circle
-                              : Icons.cancel,
-                          color:
-                              product.isAvailable ? Colors.green : Colors.red,
-                          size: 20,
+                        const SizedBox(height: 4),
+                        Text(product.brand,
+                            style: strikeStyle(theme.textTheme.bodyMedium)),
+                        const SizedBox(height: 2),
+                        Text(product.category,
+                            style: strikeStyle(theme.textTheme.bodySmall)),
+                        const Spacer(),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              "${product.price.toStringAsFixed(2)} €",
+                              style: strikeStyle(
+                                theme.textTheme.titleSmall?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: theme.colorScheme.primary,
+                                ),
+                              ),
+                            ),
+                            Icon(
+                              product.isAvailable
+                                  ? Icons.check_circle
+                                  : Icons.cancel,
+                              color: product.isAvailable
+                                  ? Colors.green
+                                  : Colors.red,
+                              size: 20,
+                            ),
+                          ],
                         ),
                       ],
                     ),
-                  ],
+                  ),
                 ),
+              ],
+            ),
+
+            // 🔹 Bouton poubelle en haut à droite
+            Positioned(
+              top: 8,
+              right: 8,
+              child: Builder(
+                // assure le bon contexte si besoin
+                builder: (context) {
+                  final theme = Theme.of(context);
+                  return IconButton(
+                    icon: Icon(Icons.delete_outline,
+                        color: theme.colorScheme.primary),
+                    onPressed: () {
+                      print("Delete product: ${product.id}");
+                    },
+                  );
+                },
               ),
             ),
           ],
