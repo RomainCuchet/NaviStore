@@ -31,7 +31,7 @@ for attempt in range(max_retries):
 def create_index_if_missing():
     """Create the index with mapping if it doesn't exist."""
     if not es.indices.exists(index=ES_INDEX).body:
-        with open("api_products/es_mapping.json", "r") as f:
+        with open("api_products/assets/json/es_mapping.json", "r") as f:
             mapping = json.load(f)
         es.indices.create(index=ES_INDEX, body=mapping)
         print(f"✅ Index '{ES_INDEX}' created with mapping.")
@@ -43,25 +43,28 @@ def create_index_if_missing():
 def reindex_products():
     """Delete existing docs and load products from products.json into Elasticsearch."""
     try:
-        with open("api_products/products.json", "r") as f:
+        with open("api_products/assets/json/products.json", "r") as f:
             products = json.load(f)
 
         # Delete all existing docs in the index
         es.delete_by_query(index=ES_INDEX, body={"query": {"match_all": {}}})
 
-        actions = [{"_index": ES_INDEX, "_source": product} for product in products]
-
+        actions = [
+            {"_index": ES_INDEX, "_id": product["id"], "_source": product}
+            for product in products
+        ]
         helpers.bulk(es, actions)
+
         print(f"✅ {len(products)} products reindexed into '{ES_INDEX}'")
     except FileNotFoundError:
         print("⚠️ products.json file not found, no products indexed")
 
 
-def search_products(
+def __get_products(
     title: str = None, brand: str = None, category: str = None, fields: list = None
 ):
     """
-    Search for products with flexible filtering logic - VERSION CORRIGÉE pour mapping keyword
+    Search for products with flexible filtering logic
     """
 
     # Validation
@@ -117,5 +120,42 @@ def search_products(
         return []
 
 
-# Ensure index exists at startup
+def __get_products_by_ids(ids: list):
+    """
+    Retrieve products by their product_ids.
+    Returns results in the same order as requested (skips missing).
+    """
+
+    if not ids:
+        return []
+
+    # sanitize and deduplicate ids while preserving order
+    seen = set()
+    ordered_ids = []
+    for i in ids:
+        sid = str(i).strip()
+        if sid and sid not in seen:
+            seen.add(sid)
+            ordered_ids.append(sid)
+
+    # _source filtering
+    mget_body = {"ids": ordered_ids}
+    params = {}
+    try:
+        res = es.mget(index=ES_INDEX, body=mget_body, params=params)
+        hits = {doc["_id"]: doc["_source"] for doc in res["docs"] if doc.get("found")}
+
+        # preserve requested order
+        return [hits[i] for i in ordered_ids if i in hits]
+
+    except Exception as e:
+        print(f"Error fetching products by ids: {e}")
+        return []
+
+
 create_index_if_missing()
+
+# TODO: Dirty solution to reset the index during development to match changes in products.json. Implement a better strategy later to prevent Downtime.
+reindex_products()
+
+# We could also use delete index in developer mode using : `Invoke-RestMethod -Method Delete -Uri "http://localhost:9200/products"`
