@@ -8,15 +8,15 @@ from pathlib import Path
 class LeclercProductsFetcher:
     """
     1 - Copy Leclerc website catalogues's html using the inspector and the copy(document.documentElement.outerHTML) command from the console.
-    2 - Paste the copied HTML into a file named "scrapped.html".
-    3 - Use fetch to extract product information from "scrapped.html" and save it to "products.json".
+    If it doesn't work, try copy(document.body.outerHTML)
+    2 - Paste the copied HTML into an .html file in the assets folder.
+    3 - Use fetch to extract product information from the HTML file.
+    4 - The fetch function will return a list of products.
 
-    Returns:
-        _type_: _description_
     """
 
     @staticmethod
-    def extract_price(product_div):
+    def __extract_price(product_div):
         """Extracts the price from a product div, using aria-label or p tags."""
         if not product_div:
             return None
@@ -41,7 +41,7 @@ class LeclercProductsFetcher:
         return None
 
     @staticmethod
-    def get_category(case):
+    def __get_category(case):
         """Gets the product category from its parent 'category_xxx'."""
         category_div = case.find_parent("div", id=re.compile(r"^category_"))
         if category_div:
@@ -90,10 +90,10 @@ class LeclercProductsFetcher:
             first_product_div = case.find("div", id="first-product")
             second_product_div = case.find("div", id="second-product")
 
-            product["first_product_price"] = LeclercProductsFetcher.extract_price(
+            product["first_product_price"] = LeclercProductsFetcher.__extract_price(
                 first_product_div
             )
-            product["second_product_price"] = LeclercProductsFetcher.extract_price(
+            product["second_product_price"] = LeclercProductsFetcher.__extract_price(
                 second_product_div
             )
 
@@ -110,50 +110,9 @@ class LeclercProductsFetcher:
                 product["price_per_measurement_unit"] = None
 
             # Category
-            product["category"] = LeclercProductsFetcher.get_category(case)
+            product["category"] = LeclercProductsFetcher.__get_category(case)
 
             articles.append(product)
+            print(f"Fetched {len(articles)} products from {html_path}.")
 
         return articles
-
-    @staticmethod
-    def remove_duplicates(products):
-        """Remove duplicate products based on title and brand.
-        Returns:
-            tuple: (unique_products, removed_count)
-        """
-        seen = set()
-        unique_products = []
-        initial_count = len(products)
-
-        for product in products:
-            identifier = (product["title"], product["brand"])
-            if identifier not in seen:
-                seen.add(identifier)
-                unique_products.append(product)
-
-        removed_count = initial_count - len(unique_products)
-        return unique_products, removed_count
-
-    @staticmethod
-    def run(html_path="assets/scrapped.html", json_path="assets/products.json"):
-        products = LeclercProductsFetcher.fetch_products(html_path)
-        file_path = Path(json_path)
-        if file_path.exists():
-            with open(file_path, "r", encoding="utf-8") as f:
-                existing_products = json.load(f)
-            existing_products.extend(products)
-        else:
-            existing_products = products
-
-        unique_products, removed_count = LeclercProductsFetcher.remove_duplicates(
-            existing_products
-        )
-
-        with open(file_path, "w", encoding="utf-8") as f:
-            json.dump(unique_products, f, ensure_ascii=False, indent=4)
-
-        print(f"Added products from path {html_path}:")
-        print(f"Total products fetched: {len(products)}")
-        print(f"Removed {removed_count} duplicate products.")
-        print(f"Unique products count: {len(unique_products)}")

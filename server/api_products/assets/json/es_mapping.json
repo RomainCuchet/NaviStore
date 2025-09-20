@@ -1,0 +1,31 @@
+{
+  "mappings": {
+    "properties": {
+      "brand": {
+        "type": "keyword"
+      },
+      "title": {
+        "type": "text",
+        "analyzer": "french"
+      },
+      "image_url": {
+        "type": "keyword"
+      },
+      "packaging_type": {
+        "type": "keyword"
+      },
+      "first_product_price": {
+        "type": "float"
+      },
+      "second_product_price": {
+        "type": "float"
+      },
+      "price_per_measurement_unit": {
+        "type": "float"
+      },
+      "category": {
+        "type": "keyword"
+      }
+    }
+  }
+}

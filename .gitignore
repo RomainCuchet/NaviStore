@@ -1,1 +1,4 @@
 __pycache__/
+.env
+test[0-9]*.py
+flutter_app_navistore/
