@@ -5,7 +5,7 @@ from collections import Counter
 class LeclercProductsAnalyser:
 
     @staticmethod
-    def display_product_stats(products, is_analyse_categories=False):
+    def display_product_stats(products, is_display_categories=False):
         if not products:
             print("No products available.")
             return
@@ -59,7 +59,7 @@ class LeclercProductsAnalyser:
         print(f"Lowest first product price: €{min_first_price:.2f}")
         print(f"Highest first product price: €{max_first_price:.2f}")
 
-        if is_analyse_categories:
+        if is_display_categories:
 
             categories = [p.get("category", "default") for p in products]
             counter = Counter(categories)
@@ -70,12 +70,30 @@ class LeclercProductsAnalyser:
                 print(f"- {cat}: {count} product(s)")
 
     @staticmethod
-    def run(json_path="assets/products.json"):
+    def fetch_categories(json_path="assets/products.json"):
+        categories = set()
+        try:
+            with open(json_path, "r", encoding="utf-8") as f:
+                products = json.load(f)
+            for p in products:
+                cat = p.get("category", "default")
+                if cat:
+                    categories.add(cat)
+        except FileNotFoundError:
+            print(f"File {json_path} not found.")
+        except json.JSONDecodeError:
+            print(f"Error decoding JSON from {json_path}.")
+        return categories
+
+    @staticmethod
+    def run(json_path="assets/products.json", is_display_categories=False):
         """Load products from a JSON file and display stats."""
         try:
             with open(json_path, "r", encoding="utf-8") as f:
                 products = json.load(f)
-            LeclercProductsAnalyser.display_product_stats(products)
+            LeclercProductsAnalyser.display_product_stats(
+                products, is_display_categories
+            )
         except FileNotFoundError:
             print(f"File {json_path} not found.")
         except json.JSONDecodeError:
