@@ -36,14 +36,15 @@ class ProductListCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                // Image avec fallback
+                // 🔹 Image depuis le web avec fallback
                 Container(
                   width: 120,
                   color: theme.colorScheme.surfaceVariant,
-                  child: Image.asset(
+                  child: Image.network(
                     product.imagePath,
                     fit: BoxFit.cover,
                     errorBuilder: (context, error, stackTrace) {
+                      // image par défaut si le lien ne charge pas
                       return Image.asset(
                         'assets/icons/default_product_icon.png',
                         fit: BoxFit.cover,
@@ -58,7 +59,6 @@ class ProductListCard extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        // Nom produit
                         Text(
                           product.name,
                           style: theme.textTheme.titleMedium?.copyWith(
@@ -109,17 +109,11 @@ class ProductListCard extends StatelessWidget {
             Positioned(
               top: 8,
               right: 8,
-              child: Builder(
-                // assure le bon contexte si besoin
-                builder: (context) {
-                  final theme = Theme.of(context);
-                  return IconButton(
-                    icon: Icon(Icons.delete_outline,
-                        color: theme.colorScheme.primary),
-                    onPressed: () {
-                      print("Delete product: ${product.id}");
-                    },
-                  );
+              child: IconButton(
+                icon: Icon(Icons.delete_outline,
+                    color: theme.colorScheme.primary),
+                onPressed: () {
+                  print("Delete product: ${product.id}");
                 },
               ),
             ),
