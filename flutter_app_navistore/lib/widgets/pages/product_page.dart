@@ -14,9 +14,9 @@ class ProductsPage extends StatefulWidget {
 }
 
 class _ProductsPageState extends State<ProductsPage> {
-  List<ProductModel> products = [];
+  List<ProductModel> allResults = []; // bruts de l’API
+  List<ProductModel> products = []; // affichés après filtres
   String searchQuery = "";
-  String? selectedBrand;
   String? selectedCategory;
 
   List<String> availableCategories = [];
@@ -35,6 +35,7 @@ class _ProductsPageState extends State<ProductsPage> {
     setState(() => isLoadingCategories = true);
     try {
       final categories = await widget.api.fetchCategories();
+      categories.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
       setState(() => availableCategories = categories);
     } catch (e) {
       print("❌ Failed to load categories: $e");
@@ -45,10 +46,9 @@ class _ProductsPageState extends State<ProductsPage> {
   }
 
   Future<void> loadProducts() async {
-    if (searchQuery.isEmpty &&
-        selectedBrand == null &&
-        selectedCategory == null) {
+    if (searchQuery.isEmpty) {
       setState(() {
+        allResults = [];
         products = [];
         errorMessage = null;
       });
@@ -62,16 +62,16 @@ class _ProductsPageState extends State<ProductsPage> {
 
     try {
       final fetched = await widget.api.getProducts(
-        title: searchQuery.isNotEmpty ? searchQuery : null,
-        brand: selectedBrand,
-        category: selectedCategory,
+        title: searchQuery,
       );
       setState(() {
-        products = fetched;
+        allResults = fetched;
+        _applyFilters();
         if (products.isEmpty) errorMessage = "Aucun produit trouvé";
       });
     } catch (e) {
       setState(() {
+        allResults = [];
         products = [];
         errorMessage = "Erreur lors de la récupération des produits";
       });
@@ -79,6 +79,22 @@ class _ProductsPageState extends State<ProductsPage> {
     } finally {
       setState(() => isLoading = false);
     }
+  }
+
+  void _applyFilters() {
+    List<ProductModel> filtered = List.from(allResults);
+
+    if (selectedCategory != null) {
+      filtered = filtered
+          .where((p) =>
+              p.category.toLowerCase() == selectedCategory!.toLowerCase())
+          .toList();
+    }
+
+    setState(() {
+      products = filtered;
+      errorMessage = products.isEmpty ? "Aucun produit trouvé" : null;
+    });
   }
 
   void _onProductTap(ProductModel product) async {
@@ -139,6 +155,7 @@ class _ProductsPageState extends State<ProductsPage> {
                         onPressed: () {
                           setState(() {
                             searchQuery = "";
+                            allResults = [];
                             products = [];
                             errorMessage = null;
                           });
@@ -155,30 +172,80 @@ class _ProductsPageState extends State<ProductsPage> {
             ),
           ),
 
-          // Filtres Row
-          Row(
-            children: [
-              DropdownButton<String>(
-                hint: const Text("Category filter"),
-                value: selectedCategory,
-                items: isLoadingCategories
-                    ? [
-                        const DropdownMenuItem(
-                            value: null, child: Text("Chargement..."))
-                      ]
-                    : availableCategories.map((brand) {
-                        return DropdownMenuItem(
-                            value: brand, child: Text(brand));
-                      }).toList(),
-                onChanged: (val) {
-                  setState(() => selectedCategory = val);
-                },
-              ),
-            ],
+          // Filtres Category avec autocomplete
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  "Filtrer par catégorie",
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 4),
+                Autocomplete<String>(
+                  optionsBuilder: (TextEditingValue textEditingValue) {
+                    if (textEditingValue.text.isEmpty)
+                      return availableCategories;
+                    return availableCategories.where((cat) => cat
+                        .toLowerCase()
+                        .contains(textEditingValue.text.toLowerCase()));
+                  },
+                  onSelected: (val) {
+                    setState(() => selectedCategory = val);
+                    _applyFilters();
+                  },
+                  fieldViewBuilder:
+                      (context, controller, focusNode, onEditingComplete) {
+                    controller.text = selectedCategory ?? '';
+                    return TextField(
+                      controller: controller,
+                      focusNode: focusNode,
+                      onEditingComplete: onEditingComplete,
+                      decoration: InputDecoration(
+                        hintText: "Sélectionner ou taper une catégorie",
+                        suffixIcon: selectedCategory != null
+                            ? IconButton(
+                                icon: const Icon(Icons.clear),
+                                onPressed: () {
+                                  setState(() => selectedCategory = null);
+                                  controller.clear();
+                                  _applyFilters();
+                                },
+                              )
+                            : null,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
           ),
+
+          // Chips affichant le filtre actif
+          if (selectedCategory != null)
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Wrap(
+                spacing: 8,
+                children: [
+                  InputChip(
+                    label: Text(selectedCategory!),
+                    onDeleted: () {
+                      setState(() => selectedCategory = null);
+                      _applyFilters();
+                    },
+                  ),
+                ],
+              ),
+            ),
 
           const SizedBox(height: 8),
 
+          // Liste produits
           Expanded(
             child: isLoading
                 ? const Center(child: CircularProgressIndicator())
