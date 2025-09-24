@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'product_card.dart';
+import 'product_list_card.dart';
 import '../../models/product_model.dart';
 
 class ShoppingListExtendedCard extends StatefulWidget {
@@ -55,7 +55,7 @@ class _ShoppingListExtendedCardState extends State<ShoppingListExtendedCard> {
                     itemCount: sortedProducts.length,
                     itemBuilder: (context, index) {
                       final product = sortedProducts[index];
-                      return ProductCard(
+                      return ProductListCard(
                         product: product,
                         strikeFields: !product.isAvailable,
                       );

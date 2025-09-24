@@ -4,7 +4,7 @@ import 'package:namer_app/services/product_api_service.dart';
 import 'package:provider/provider.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'widgets/pages/shopping_lists_page.dart';
-import 'widgets/pages/product_page.dart';
+import 'widgets/pages/browse_products_page.dart';
 import 'models/product_model.dart';
 import 'models/shopping_list_model.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -94,7 +94,7 @@ class _MyHomePageState extends State<MyHomePage> {
         page = ShoppingListsPage();
         break;
       case 2:
-        page = ProductsPage(api: productService);
+        page = BrowseProductsPage(api: productService);
         break;
       default:
         throw UnimplementedError('no widget for $selectedIndex');

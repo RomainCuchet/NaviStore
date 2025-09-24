@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import '../../models/product_model.dart';
 
-class ProductCard extends StatelessWidget {
+class ProductListCard extends StatelessWidget {
   final ProductModel product;
   final bool strikeFields;
 
-  const ProductCard({
+  const ProductListCard({
     super.key,
     required this.product,
     this.strikeFields = false,

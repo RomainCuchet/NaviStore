@@ -3,17 +3,19 @@ import '../../models/product_model.dart';
 import '../../services/product_api_service.dart';
 import '../../repositories/shopping_list_repository.dart';
 import '../../models/shopping_list_model.dart';
+import '../cards/product_detail_card_browse.dart';
+import '../cards/product_list_card_browse.dart';
 
-class ProductsPage extends StatefulWidget {
+class BrowseProductsPage extends StatefulWidget {
   final ProductApiService api;
 
-  const ProductsPage({super.key, required this.api});
+  const BrowseProductsPage({super.key, required this.api});
 
   @override
-  State<ProductsPage> createState() => _ProductsPageState();
+  State<BrowseProductsPage> createState() => _BrowseProductsPageState();
 }
 
-class _ProductsPageState extends State<ProductsPage> {
+class _BrowseProductsPageState extends State<BrowseProductsPage> {
   List<ProductModel> allResults = []; // bruts de l’API
   List<ProductModel> products = []; // affichés après filtres
   String searchQuery = "";
@@ -260,22 +262,18 @@ class _ProductsPageState extends State<ProductsPage> {
                         itemCount: products.length,
                         itemBuilder: (_, index) {
                           final product = products[index];
-                          return Card(
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16)),
-                            margin: const EdgeInsets.all(8),
-                            child: ListTile(
-                              leading: Image.network(
-                                product.imagePath,
-                                width: 50,
-                                height: 50,
-                                fit: BoxFit.cover,
-                              ),
-                              title: Text(product.name),
-                              subtitle:
-                                  Text("${product.brand} • ${product.price} €"),
-                              onTap: () => _onProductTap(product),
-                            ),
+                          return ProductListCardBrowse(
+                            product: product,
+                            onTap: () {
+                              showDialog(
+                                context: context,
+                                builder: (ctx) => ProductDetailCardBrowse(
+                                  product: product,
+                                  onAddToList: () => _onProductTap(product),
+                                ),
+                              );
+                            },
+                            onAddToList: () => _onProductTap(product),
                           );
                         },
                       ),
