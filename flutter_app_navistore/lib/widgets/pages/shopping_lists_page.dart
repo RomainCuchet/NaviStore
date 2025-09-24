@@ -12,51 +12,45 @@ class ShoppingListsPage extends StatefulWidget {
 }
 
 class _ShoppingListsPageState extends State<ShoppingListsPage> {
-  late Future<List<ShoppingListModel>> _listsFuture;
-  late Future<List<ProductModel>> _productsFuture;
+  late Box<ShoppingListModel> shoppingListBox;
+  late Box<ProductModel> productBox;
 
   @override
   void initState() {
     super.initState();
-    _productsFuture = ProductModel.getAllFromHive();
-    _listsFuture = ShoppingListModel.getAllFromHive();
+    shoppingListBox = Hive.box<ShoppingListModel>('shopping_lists');
+    productBox = Hive.box<ProductModel>('products');
+  }
+
+  List<ProductModel> _getProductsForList(List<String> ids) {
+    return ids
+        .map((id) => productBox.get(id))
+        .whereType<ProductModel>() // filtre les nulls
+        .toList();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text("Shopping Lists")),
-      body: FutureBuilder<List<ShoppingListModel>>(
-        future: _listsFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return Center(child: Text('Erreur: ${snapshot.error}'));
-          }
+    final lists = shoppingListBox.values.toList();
 
-          final lists = snapshot.data ?? [];
+    if (lists.isEmpty) {
+      return const Center(child: Text('Aucune liste enregistrée'));
+    }
 
-          if (lists.isEmpty) {
-            return const Center(child: Text('Aucune liste enregistrée'));
-          }
-
-          return GridView.count(
-            padding: const EdgeInsets.all(16),
-            crossAxisCount: 2,
-            crossAxisSpacing: 16,
-            mainAxisSpacing: 16,
-            children: lists
-                .map((list) => ShoppingListCard(
-                      name: list.name,
-                      icon: Icons.list, // tu peux customiser selon la liste
-                      ids: list.productIds,
-                    ))
-                .toList(),
-          );
-        },
-      ),
+    return GridView.count(
+      padding: const EdgeInsets.all(16),
+      crossAxisCount: 2,
+      crossAxisSpacing: 16,
+      mainAxisSpacing: 16,
+      children: lists.map((list) {
+        final products = _getProductsForList(list.productIds);
+        return ShoppingListCard(
+          name: list.name,
+          icon: Icons.list,
+          ids: list.productIds,
+          products: products,
+        );
+      }).toList(),
     );
   }
 }

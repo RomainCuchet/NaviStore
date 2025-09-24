@@ -6,96 +6,22 @@ class ShoppingListCard extends StatelessWidget {
   final String name;
   final IconData icon;
   final List<String> ids;
+  final List<ProductModel> products; // ✅ ajout
 
   const ShoppingListCard({
     Key? key,
     required this.name,
     required this.icon,
     required this.ids,
+    required this.products, // ✅ ajout
   }) : super(key: key);
 
   Future<void> _openExtendedCard(BuildContext context) async {
     try {
-      // MOCK data for now
-      final products = [
-        ProductModel(
-          id: "p1",
-          name: "Pommes Gala",
-          isAvailable: true,
-          brand: "Nature Fruits",
-          category: "Fruits",
-          price: 2.49,
-          imagePath: "assets/images/pommes.jpg",
-        ),
-        ProductModel(
-          id: "p2",
-          name: "Pâtes bio",
-          isAvailable: false,
-          brand: "Itali Market",
-          category: "Épicerie",
-          price: 1.59,
-          imagePath: "assets/images/pates.jpg",
-        ),
-        ProductModel(
-          id: "p3",
-          name: "Yaourt nature",
-          isAvailable: true,
-          brand: "Lactomia",
-          category: "Produits laitiers",
-          price: 1.89,
-          imagePath: "assets/images/yaourt.jpg",
-        ),
-        ProductModel(
-          id: "p3",
-          name: "Yaourt nature",
-          isAvailable: true,
-          brand: "Lactomia",
-          category: "Produits laitiers",
-          price: 1.89,
-          imagePath: "assets/images/yaourt.jpg",
-        ),
-        ProductModel(
-          id: "p3",
-          name: "Yaourt nature",
-          isAvailable: true,
-          brand: "Lactomia",
-          category: "Produits laitiers",
-          price: 1.89,
-          imagePath: "assets/images/yaourt.jpg",
-        ),
-        ProductModel(
-          id: "p3",
-          name: "Yaourt nature",
-          isAvailable: true,
-          brand: "Lactomia",
-          category: "Produits laitiers",
-          price: 1.89,
-          imagePath: "assets/images/yaourt.jpg",
-        ),
-        ProductModel(
-          id: "p3",
-          name: "Yaourt nature",
-          isAvailable: true,
-          brand: "Lactomia",
-          category: "Produits laitiers",
-          price: 1.89,
-          imagePath: "assets/images/yaourt.jpg",
-        ),
-        ProductModel(
-          id: "p3",
-          name: "Yaourt nature",
-          isAvailable: false,
-          brand: "",
-          category: "",
-          price: 0,
-          imagePath: "assets/images/yaourt.jpg",
-        ),
-      ];
-
-      // ✅ Une fois récupérés (API ou mock), on affiche l’extended card
+      // Utilise maintenant les produits réels
       Navigator.of(context).push(
         PageRouteBuilder(
-          opaque: false, // pour l’overlay
+          opaque: false,
           pageBuilder: (_, __, ___) => ShoppingListExtendedCard(
             listName: name,
             products: products,
@@ -103,7 +29,6 @@ class ShoppingListCard extends StatelessWidget {
         ),
       );
     } catch (e) {
-      // Error Handeling (API down, parsing, etc.)
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Impossible de charger les produits : $e")),
       );
