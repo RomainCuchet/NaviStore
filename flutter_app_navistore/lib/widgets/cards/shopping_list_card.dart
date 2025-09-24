@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../models/product.dart';
-import '../../services/product_service.dart';
+import '../../models/product_model.dart';
 import 'shopping_list_extended_card.dart';
 
 class ShoppingListCard extends StatelessWidget {
@@ -17,13 +16,9 @@ class ShoppingListCard extends StatelessWidget {
 
   Future<void> _openExtendedCard(BuildContext context) async {
     try {
-      // TODO: real API call to implement:
-      // final productService = ProductService(baseUrl: "https://monapi.com");
-      // final products = await productService.fetchProductsByIds(ids);
-
       // MOCK data for now
       final products = [
-        Product(
+        ProductModel(
           id: "p1",
           name: "Pommes Gala",
           isAvailable: true,
@@ -32,7 +27,7 @@ class ShoppingListCard extends StatelessWidget {
           price: 2.49,
           imagePath: "assets/images/pommes.jpg",
         ),
-        Product(
+        ProductModel(
           id: "p2",
           name: "Pâtes bio",
           isAvailable: false,
@@ -41,7 +36,7 @@ class ShoppingListCard extends StatelessWidget {
           price: 1.59,
           imagePath: "assets/images/pates.jpg",
         ),
-        Product(
+        ProductModel(
           id: "p3",
           name: "Yaourt nature",
           isAvailable: true,
@@ -50,7 +45,7 @@ class ShoppingListCard extends StatelessWidget {
           price: 1.89,
           imagePath: "assets/images/yaourt.jpg",
         ),
-        Product(
+        ProductModel(
           id: "p3",
           name: "Yaourt nature",
           isAvailable: true,
@@ -59,7 +54,7 @@ class ShoppingListCard extends StatelessWidget {
           price: 1.89,
           imagePath: "assets/images/yaourt.jpg",
         ),
-        Product(
+        ProductModel(
           id: "p3",
           name: "Yaourt nature",
           isAvailable: true,
@@ -68,7 +63,7 @@ class ShoppingListCard extends StatelessWidget {
           price: 1.89,
           imagePath: "assets/images/yaourt.jpg",
         ),
-        Product(
+        ProductModel(
           id: "p3",
           name: "Yaourt nature",
           isAvailable: true,
@@ -77,7 +72,7 @@ class ShoppingListCard extends StatelessWidget {
           price: 1.89,
           imagePath: "assets/images/yaourt.jpg",
         ),
-        Product(
+        ProductModel(
           id: "p3",
           name: "Yaourt nature",
           isAvailable: true,
@@ -86,7 +81,7 @@ class ShoppingListCard extends StatelessWidget {
           price: 1.89,
           imagePath: "assets/images/yaourt.jpg",
         ),
-        Product(
+        ProductModel(
           id: "p3",
           name: "Yaourt nature",
           isAvailable: false,

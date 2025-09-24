@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'product_card.dart';
-import '../../models/product.dart';
+import '../../models/product_model.dart';
 
 class ShoppingListExtendedCard extends StatefulWidget {
   final String listName;
-  final List<Product> products;
+  final List<ProductModel> products;
 
   const ShoppingListExtendedCard({
     super.key,
@@ -30,7 +30,7 @@ class _ShoppingListExtendedCardState extends State<ShoppingListExtendedCard> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    final sortedProducts = List<Product>.from(widget.products)
+    final sortedProducts = List<ProductModel>.from(widget.products)
       ..sort((a, b) {
         if (a.isAvailable && !b.isAvailable) return -1;
         if (!a.isAvailable && b.isAvailable) return 1;

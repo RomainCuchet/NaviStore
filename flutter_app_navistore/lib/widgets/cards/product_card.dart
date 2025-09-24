@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import '../../models/product.dart';
+import '../../models/product_model.dart';
 
 class ProductCard extends StatelessWidget {
-  final Product product;
+  final ProductModel product;
   final bool strikeFields;
 
   const ProductCard({

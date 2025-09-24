@@ -3,7 +3,11 @@ from typing import Optional
 import logging
 import os
 
-from api_products.crud import __get_products, __get_products_by_ids
+from api_products.crud import (
+    __get_products,
+    __get_products_by_ids,
+    __get_product_categories,
+)
 from api_products.auth import verify_api_key, require_write_rights
 
 router = APIRouter(prefix="/products", tags=["Products"])
@@ -99,4 +103,28 @@ async def get_products_by_ids(
         # Capture validation errors from the search_products function
         raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur interne: {str(e)}")
+
+
+@router.get("/get_categories")
+async def get_product_categories(
+    user_info: dict = Depends(verify_api_key),
+):
+    try:
+        categories = __get_product_categories()
+
+        logger.info(
+            "GET /products/get_categories called by user=%s role=%s | results=%d",
+            user_info["user"],
+            user_info["role"],
+            len(categories),
+        )
+
+        return {
+            "count": len(categories),
+            "results": categories,
+        }
+
+    except Exception as e:
+        logger.error("Internal error: %s", e)
         raise HTTPException(status_code=500, detail=f"Erreur interne: {str(e)}")

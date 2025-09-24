@@ -153,6 +153,22 @@ def __get_products_by_ids(ids: list):
         return []
 
 
+def __get_product_categories():
+    """
+    Retrieve product categories from data_store.json
+    """
+    try:
+        with open(
+            "api_products/assets/json/data_store.json", "r", encoding="utf-8"
+        ) as f:
+            data = json.load(f)
+            categories = data.get("categories", [])
+            return categories
+    except Exception as e:
+        print(f"Error fetching product categories: {e}")
+        return []
+
+
 create_index_if_missing()
 
 # TODO: Dirty solution to reset the index during development to match changes in products.json. Implement a better strategy later to prevent Downtime.

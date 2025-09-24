@@ -69,11 +69,11 @@ class ProductsManager:
         with open(self.json_path, "w", encoding="utf-8") as f:
             json.dump(self.products, f, ensure_ascii=False, indent=4)
 
-    def __update_data_store(self):
+    def __update_data_store(self, key: str, value):
         try:
             with open(self.data_store_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            data["next_product_id"] = self.next_product_id
+            data[key] = value
             with open(self.data_store_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=4)
             print(
@@ -142,7 +142,15 @@ class ProductsManager:
         if count_added_products > 0:
             print(f"Added {count_added_products} new products to {self.json_path}.")
             self.__save_products()
-            self.__update_data_store()
+            self.__update_data_store("next_product_id", self.next_product_id)
         else:
             print(f"No new products to add from {html_file_path} to {self.json_path}.")
         return products
+
+    def update_categories(self) -> set:
+        categories = set()
+        for product in self.products:
+            if "category" in product and product["category"]:
+                categories.add(product["category"])
+        self.__update_data_store("categories", list(categories))
+        return categories

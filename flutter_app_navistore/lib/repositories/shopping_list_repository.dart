@@ -1,35 +1,56 @@
-import 'dart:convert';
-import 'package:shared_preferences/shared_preferences.dart';
-import '../models/shopping_list.dart';
+import 'package:hive/hive.dart';
+import '../models/product_model.dart';
+import '../models/shopping_list_model.dart';
 
 class ShoppingListRepository {
-  static const _key = "shopping_lists";
+  static const _boxName = 'shopping_lists';
 
-  static Future<List<ShoppingList>> loadLists() async {
-    final prefs = await SharedPreferences.getInstance();
-    final data = prefs.getString(_key);
-
-    if (data == null) return [];
-    final List decoded = jsonDecode(data);
-
-    return decoded.map((json) => ShoppingList.fromJson(json)).toList();
+  Future<Box<ShoppingListModel>> _openBox() async {
+    return Hive.openBox<ShoppingListModel>(_boxName);
   }
 
-  static Future<void> saveLists(List<ShoppingList> lists) async {
-    final prefs = await SharedPreferences.getInstance();
-    final encoded = jsonEncode(lists.map((l) => l.toJson()).toList());
-    await prefs.setString(_key, encoded);
+  Future<List<ShoppingListModel>> getAllLists() async {
+    final box = await _openBox();
+    return box.values.toList();
   }
 
-  static Future<void> addList(ShoppingList list) async {
-    final lists = await loadLists();
-    lists.add(list);
-    await saveLists(lists);
+  Future<void> addShoppingList(ShoppingListModel list) async {
+    final box = await _openBox();
+    await box.put(list.id, list);
   }
 
-  static Future<void> removeList(String id) async {
-    final lists = await loadLists();
-    lists.removeWhere((l) => l.id == id);
-    await saveLists(lists);
+  Future<void> deleteShoppingList(String id) async {
+    final box = await _openBox();
+    await box.delete(id);
+  }
+
+  Future<void> addProductToList(String listId, ProductModel product) async {
+    final box = await _openBox();
+    final list = box.get(listId);
+    if (list != null) {
+      final updated = ShoppingListModel(
+        id: list.id,
+        name: list.name,
+        productIds: [...list.productIds, product.id],
+      );
+      await box.put(listId, updated);
+    }
+    // Sauvegarder le produit dans sa box si pas déjà
+    final productBox = await Hive.openBox<ProductModel>('products');
+    if (!productBox.containsKey(product.id)) {
+      await productBox.put(product.id, product);
+    }
+  }
+
+  Future<List<ProductModel>> getProductsForList(String listId) async {
+    final box = await _openBox();
+    final list = box.get(listId);
+    if (list == null) return [];
+
+    final productBox = await Hive.openBox<ProductModel>('products');
+    return list.productIds
+        .map((id) => productBox.get(id))
+        .whereType<ProductModel>()
+        .toList();
   }
 }

@@ -1,10 +1,38 @@
 import 'package:english_words/english_words.dart';
 import 'package:flutter/material.dart';
+import 'package:namer_app/services/product_api_service.dart';
 import 'package:provider/provider.dart';
-import 'widgets/screens/shopping_lists_screen.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+import 'widgets/pages/shopping_lists_page.dart';
+import 'widgets/pages/product_page.dart';
+import 'models/product_model.dart';
+import 'models/shopping_list_model.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
-void main() {
-  runApp(MyApp());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await dotenv.load(fileName: ".env");
+
+  final productService = ProductApiService(
+    baseUrl: dotenv.env['API_URL'] ?? 'http://localhost:8000',
+    apiKey: dotenv.env['API_KEY'] ?? '',
+  );
+
+  await Hive.initFlutter();
+  Hive.registerAdapter(ProductModelAdapter());
+  Hive.registerAdapter(ShoppingListModelAdapter());
+  await Hive.openBox<ProductModel>('products');
+  await Hive.openBox<ShoppingListModel>('shopping_lists');
+
+  runApp(
+    MultiProvider(
+      providers: [
+        Provider<ProductApiService>.value(value: productService),
+        ChangeNotifierProvider(create: (_) => MyAppState()),
+      ],
+      child: const MyApp(),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
@@ -15,7 +43,7 @@ class MyApp extends StatelessWidget {
     return ChangeNotifierProvider(
       create: (context) => MyAppState(),
       child: MaterialApp(
-        title: 'Namer App',
+        title: 'NaviMall',
         theme: ThemeData(
           useMaterial3: true,
           colorScheme: ColorScheme.fromSeed(
@@ -52,17 +80,21 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  @override
   var selectedIndex = 0;
 
   Widget build(BuildContext context) {
     Widget page;
+    final productService =
+        Provider.of<ProductApiService>(context, listen: false);
     switch (selectedIndex) {
       case 0:
         page = GeneratorPage();
         break;
       case 1:
-        page = ShoppingListsScreen();
+        page = ShoppingListsPage();
+        break;
+      case 2:
+        page = ProductsPage(api: productService);
         break;
       default:
         throw UnimplementedError('no widget for $selectedIndex');
@@ -80,8 +112,12 @@ class _MyHomePageState extends State<MyHomePage> {
                     label: Text('Home'),
                   ),
                   NavigationRailDestination(
-                    icon: Icon(Icons.shopping_cart),
+                    icon: Icon(Icons.list),
                     label: Text('Shopping Lists'),
+                  ),
+                  NavigationRailDestination(
+                    icon: Icon(Icons.search),
+                    label: Text('Products'),
                   ),
                 ],
                 selectedIndex: selectedIndex,
@@ -171,34 +207,6 @@ class BigCard extends StatelessWidget {
         child: Text(pair.asLowerCase,
             style: style, semanticsLabel: "${pair.first} ${pair.second}"),
       ),
-    );
-  }
-}
-
-class FavoritesPage extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    var appState = context.watch<MyAppState>();
-
-    if (appState.favorites.isEmpty) {
-      return Center(
-        child: Text('No favorites yet.'),
-      );
-    }
-
-    return ListView(
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(20),
-          child: Text('You have '
-              '${appState.favorites.length} favorites:'),
-        ),
-        for (var pair in appState.favorites)
-          ListTile(
-            leading: Icon(Icons.favorite),
-            title: Text(pair.asLowerCase),
-          ),
-      ],
     );
   }
 }
