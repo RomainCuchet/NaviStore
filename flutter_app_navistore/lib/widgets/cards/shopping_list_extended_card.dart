@@ -6,7 +6,7 @@ import 'product_list_card.dart';
 
 class ShoppingListExtendedCard extends StatefulWidget {
   final ShoppingListModel shoppingList;
-  final VoidCallback? onDelete; // callback pour suppression de la liste
+  final VoidCallback? onDelete;
 
   const ShoppingListExtendedCard({
     super.key,
@@ -20,19 +20,57 @@ class ShoppingListExtendedCard extends StatefulWidget {
 }
 
 class _ShoppingListExtendedCardState extends State<ShoppingListExtendedCard> {
-  late List<ProductModel> products;
+  List<ProductModel> products = [];
+  bool _isLoading = true;
   bool _showInOtherView = false;
+  late TextEditingController _nameController;
 
   @override
   void initState() {
     super.initState();
-    // Clonage pour modification locale
-    products = List<ProductModel>.from(widget.shoppingList.products);
+    _nameController = TextEditingController(text: widget.shoppingList.name);
+    _loadProductsFromHive();
+  }
+
+  /// Charge uniquement les produits depuis Hive
+  Future<void> _loadProductsFromHive() async {
+    setState(() => _isLoading = true);
+    try {
+      final allProducts = await ProductModel.getAllFromHive();
+      final productMap = {for (var p in allProducts) p.id: p};
+
+      final listProducts = widget.shoppingList.productIds.map((id) {
+        // Produit trouvé dans Hive
+        return productMap[id] ??
+            ProductModel(
+              id: id,
+              name: "Produit inconnu",
+              price: 0,
+              category: "Inconnu",
+              isAvailable: false,
+            );
+      }).toList();
+
+      setState(() => products = listProducts);
+
+      // Supprime les produits orphelins (non utilisés dans aucune liste)
+      final allLists = await ShoppingListModel.getAllFromHive();
+      final usedIds = allLists.expand((l) => l.productIds).toSet();
+      for (var p in allProducts) {
+        if (!usedIds.contains(p.id)) {
+          await p.deleteFromHive();
+        }
+      }
+    } catch (e) {
+      print("❌ Failed to load products from Hive: $e");
+      setState(() => products = []);
+    } finally {
+      setState(() => _isLoading = false);
+    }
   }
 
   double get totalAvailable =>
       products.where((p) => p.isAvailable).fold(0, (sum, p) => sum + p.price);
-
   double get totalAll => products.fold(0, (sum, p) => sum + p.price);
 
   Future<void> _deleteProduct(ProductModel product) async {
@@ -43,13 +81,11 @@ class _ShoppingListExtendedCardState extends State<ShoppingListExtendedCard> {
         content: Text("Voulez-vous vraiment supprimer '${product.name}' ?"),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text("Annuler"),
-          ),
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text("Annuler")),
           TextButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text("Supprimer"),
-          ),
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text("Supprimer")),
         ],
       ),
     );
@@ -57,22 +93,41 @@ class _ShoppingListExtendedCardState extends State<ShoppingListExtendedCard> {
     if (confirmed == true) {
       setState(() => products.remove(product));
 
-      // Mise à jour Hive
+      // Met à jour la liste Hive
       final repo = ShoppingListRepository();
-      final updatedList = ShoppingListModel(
-        id: widget.shoppingList.id,
-        name: widget.shoppingList.name,
-        products: List<ProductModel>.from(products),
+      await repo.updateShoppingList(
+        widget.shoppingList.copyWith(
+          productIds: products.map((p) => p.id).toList(),
+        ),
       );
-      await repo.updateShoppingList(updatedList);
+
+      // Supprime le produit de Hive s’il n’est plus utilisé dans aucune liste
+      final allLists = await ShoppingListModel.getAllFromHive();
+      final usedIds = allLists.expand((l) => l.productIds).toSet();
+      if (!usedIds.contains(product.id)) {
+        await product.deleteFromHive();
+      }
     }
+  }
+
+  Future<void> _updateListName() async {
+    final newName = _nameController.text.trim();
+    if (newName.isEmpty || newName == widget.shoppingList.name) return;
+
+    setState(() => widget.shoppingList.name = newName);
+
+    final repo = ShoppingListRepository();
+    await repo.updateShoppingList(
+      widget.shoppingList.copyWith(
+        name: newName,
+        productIds: products.map((p) => p.id).toList(),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-
-    // Tri : disponibles en haut
     final sortedProducts = List<ProductModel>.from(products)
       ..sort((a, b) {
         if (a.isAvailable && !b.isAvailable) return -1;
@@ -94,32 +149,39 @@ class _ShoppingListExtendedCardState extends State<ShoppingListExtendedCard> {
                 // Liste des produits
                 Padding(
                   padding: const EdgeInsets.only(top: 100, bottom: 60),
-                  child: ListView.builder(
-                    itemCount: sortedProducts.length,
-                    itemBuilder: (context, index) {
-                      final product = sortedProducts[index];
-                      return ProductListCard(
-                        product: product,
-                        strikeFields: !product.isAvailable,
-                        onDelete: () => _deleteProduct(product),
-                      );
-                    },
-                  ),
+                  child: _isLoading
+                      ? const Center(child: CircularProgressIndicator())
+                      : ListView.builder(
+                          itemCount: sortedProducts.length,
+                          itemBuilder: (context, index) {
+                            final product = sortedProducts[index];
+                            return ProductListCard(
+                              product: product,
+                              strikeFields: !product.isAvailable,
+                              onDelete: () => _deleteProduct(product),
+                            );
+                          },
+                        ),
                 ),
 
                 // Nom de la liste + switch
                 Positioned(
                   top: 16,
                   left: 16,
-                  right: 70,
+                  right: 120,
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        widget.shoppingList.name,
-                        style: theme.textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: theme.colorScheme.onSurface,
+                      Expanded(
+                        child: TextField(
+                          controller: _nameController,
+                          style: theme.textTheme.headlineSmall?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: theme.colorScheme.onSurface),
+                          decoration: const InputDecoration(
+                            border: InputBorder.none,
+                          ),
+                          onSubmitted: (_) => _updateListName(),
                         ),
                       ),
                       Row(
@@ -137,9 +199,8 @@ class _ShoppingListExtendedCardState extends State<ShoppingListExtendedCard> {
                           Switch.adaptive(
                             value: _showInOtherView,
                             activeColor: theme.colorScheme.primary,
-                            onChanged: (val) {
-                              setState(() => _showInOtherView = val);
-                            },
+                            onChanged: (val) =>
+                                setState(() => _showInOtherView = val),
                           ),
                         ],
                       ),
@@ -155,6 +216,38 @@ class _ShoppingListExtendedCardState extends State<ShoppingListExtendedCard> {
                     icon: Icon(Icons.close,
                         size: 28, color: theme.colorScheme.onSurface),
                     onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ),
+
+                // Bouton supprimer la liste
+                Positioned(
+                  top: 16,
+                  right: 60,
+                  child: IconButton(
+                    icon: Icon(Icons.delete_outline,
+                        size: 28, color: theme.colorScheme.error),
+                    onPressed: () async {
+                      final confirmed = await showDialog<bool>(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          title: const Text("Supprimer la liste ?"),
+                          content: Text(
+                              "Voulez-vous vraiment supprimer la liste '${widget.shoppingList.name}' ?"),
+                          actions: [
+                            TextButton(
+                                onPressed: () => Navigator.of(ctx).pop(false),
+                                child: const Text("Annuler")),
+                            TextButton(
+                                onPressed: () => Navigator.of(ctx).pop(true),
+                                child: const Text("Supprimer")),
+                          ],
+                        ),
+                      );
+                      if (confirmed == true && widget.onDelete != null) {
+                        widget.onDelete!();
+                        Navigator.of(context).pop();
+                      }
+                    },
                   ),
                 ),
 
@@ -185,41 +278,6 @@ class _ShoppingListExtendedCardState extends State<ShoppingListExtendedCard> {
                         ),
                       ],
                     ),
-                  ),
-                ),
-
-                // Bouton supprimer la liste
-                Positioned(
-                  top: 16,
-                  right: 60,
-                  child: IconButton(
-                    icon: Icon(Icons.delete_outline,
-                        size: 28, color: theme.colorScheme.error),
-                    onPressed: () async {
-                      final confirmed = await showDialog<bool>(
-                        context: context,
-                        builder: (ctx) => AlertDialog(
-                          title: const Text("Supprimer la liste ?"),
-                          content: Text(
-                              "Voulez-vous vraiment supprimer la liste '${widget.shoppingList.name}' ?"),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.of(ctx).pop(false),
-                              child: const Text("Annuler"),
-                            ),
-                            TextButton(
-                              onPressed: () => Navigator.of(ctx).pop(true),
-                              child: const Text("Supprimer"),
-                            ),
-                          ],
-                        ),
-                      );
-
-                      if (confirmed == true && widget.onDelete != null) {
-                        widget.onDelete!();
-                        Navigator.of(context).pop();
-                      }
-                    },
                   ),
                 ),
               ],

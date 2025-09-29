@@ -64,7 +64,7 @@ class ShoppingListCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    "${shoppingList.products.length} produit${shoppingList.products.length > 1 ? 's' : ''}",
+                    "${shoppingList.productIds.length} produit${shoppingList.productIds.length > 1 ? 's' : ''}",
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),

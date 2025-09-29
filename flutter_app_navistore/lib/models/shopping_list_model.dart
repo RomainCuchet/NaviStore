@@ -1,5 +1,4 @@
 import 'package:hive/hive.dart';
-import 'product_model.dart';
 
 part 'shopping_list_model.g.dart';
 
@@ -9,23 +8,24 @@ class ShoppingListModel extends HiveObject {
   final String id;
 
   @HiveField(1)
-  final String name;
+  String name;
 
+  /// Stocke uniquement les IDs des produits
   @HiveField(2)
-  final List<ProductModel> products;
+  final List<String> productIds;
 
   ShoppingListModel({
     required this.id,
     required this.name,
-    required this.products,
+    required this.productIds,
   });
 
   factory ShoppingListModel.fromJson(Map<String, dynamic> json) {
     return ShoppingListModel(
       id: json['id'] as String,
       name: json['name'] as String,
-      products: (json['products'] as List)
-          .map((e) => ProductModel.fromJson(e as Map<String, dynamic>))
+      productIds: (json['productIds'] as List<dynamic>)
+          .map((e) => e.toString())
           .toList(),
     );
   }
@@ -34,7 +34,7 @@ class ShoppingListModel extends HiveObject {
     return {
       'id': id,
       'name': name,
-      'products': products.map((p) => p.toJson()).toList(),
+      'productIds': productIds,
     };
   }
 
@@ -51,5 +51,31 @@ class ShoppingListModel extends HiveObject {
   static Future<List<ShoppingListModel>> getAllFromHive() async {
     final box = await Hive.openBox<ShoppingListModel>('shopping_lists');
     return box.values.toList();
+  }
+
+  /// Ajoute un produit (par ID) à la liste
+  Future<void> addProductId(String productId) async {
+    if (!productIds.contains(productId)) {
+      productIds.add(productId);
+      await saveToHive();
+    }
+  }
+
+  /// Retire un produit (par ID) de la liste
+  Future<void> removeProductId(String productId) async {
+    productIds.remove(productId);
+    await saveToHive();
+  }
+
+  /// Copie avec modification des champs (utile pour repository)
+  ShoppingListModel copyWith({
+    String? name,
+    List<String>? productIds,
+  }) {
+    return ShoppingListModel(
+      id: id,
+      name: name ?? this.name,
+      productIds: productIds ?? this.productIds,
+    );
   }
 }

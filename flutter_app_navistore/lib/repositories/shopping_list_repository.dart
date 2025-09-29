@@ -1,63 +1,65 @@
 import 'package:hive/hive.dart';
-import '../models/product_model.dart';
 import '../models/shopping_list_model.dart';
 
 class ShoppingListRepository {
-  static const _boxName = 'shopping_lists';
+  final String _boxName = 'shopping_lists';
 
-  Future<Box<ShoppingListModel>> _openBox() async {
-    return Hive.openBox<ShoppingListModel>(_boxName);
+  /// Ouvre la box Hive
+  Future<Box<ShoppingListModel>> _getBox() async {
+    return await Hive.openBox<ShoppingListModel>(_boxName);
   }
 
   /// Récupérer toutes les listes
-  Future<List<ShoppingListModel>> getAllLists() async {
-    final box = await _openBox();
+  Future<List<ShoppingListModel>> getAllShoppingLists() async {
+    final box = await _getBox();
     return box.values.toList();
   }
 
   /// Ajouter une nouvelle liste
-  Future<void> addShoppingList(ShoppingListModel list) async {
-    final box = await _openBox();
-    await box.put(list.id, list);
+  Future<void> addShoppingList(ShoppingListModel shoppingList) async {
+    final box = await _getBox();
+    await box.put(shoppingList.id, shoppingList);
+  }
+
+  /// Mettre à jour une liste existante
+  Future<void> updateShoppingList(ShoppingListModel shoppingList) async {
+    final box = await _getBox();
+    await box.put(shoppingList.id, shoppingList);
   }
 
   /// Supprimer une liste
   Future<void> deleteShoppingList(String id) async {
-    final box = await _openBox();
+    final box = await _getBox();
     await box.delete(id);
   }
 
-  /// Ajouter un produit à une liste existante
-  Future<void> addProductToList(String listId, ProductModel product) async {
-    final box = await _openBox();
+  /// Ajouter un produit à une liste
+  Future<void> addProductToList(String listId, String productId) async {
+    final box = await _getBox();
     final list = box.get(listId);
     if (list != null) {
-      list.products.add(product);
-      await list.save();
+      final updated = list.copyWith(
+        productIds: [...list.productIds, productId],
+      );
+      await box.put(listId, updated);
     }
   }
 
-  /// Supprimer un produit d'une liste
-  Future<void> removeProductFromList(
-      String listId, ProductModel product) async {
-    final box = await _openBox();
+  /// Supprimer un produit d’une liste
+  Future<void> removeProductFromList(String listId, String productId) async {
+    final box = await _getBox();
     final list = box.get(listId);
     if (list != null) {
-      list.products.removeWhere((p) => p.id == product.id);
-      await list.save();
+      final updated = list.copyWith(
+        productIds: list.productIds.where((id) => id != productId).toList(),
+      );
+      await box.put(listId, updated);
     }
   }
 
-  /// Mettre à jour la liste entière (produits + nom si besoin)
-  Future<void> updateShoppingList(ShoppingListModel updatedList) async {
-    final box = await _openBox();
-    await box.put(updatedList.id, updatedList);
-  }
-
-  /// Récupérer les produits pour une liste
-  Future<List<ProductModel>> getProductsForList(String listId) async {
-    final box = await _openBox();
-    final list = box.get(listId);
-    return list?.products ?? [];
+  /// Supprimer toutes les listes
+  Future<void> clearAllLists() async {
+    final box = await _getBox();
+    await box.clear();
   }
 }

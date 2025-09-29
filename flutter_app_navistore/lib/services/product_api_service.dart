@@ -42,21 +42,28 @@ class ProductApiService {
     }
   }
 
-  /// Exemple pour récupérer des produits par ids
   Future<List<ProductModel>> getProductsByIds(List<String> ids) async {
-    final uri =
-        Uri.parse('$baseUrl/products/get_by_ids').replace(queryParameters: {
-      'ids': ids.join(','), // passer en string séparé par des virgules
-    });
+    final uri = Uri.parse('$baseUrl/products/get_by_ids').replace(
+      queryParameters: {
+        'ids': ids, // 👈 pass as list, backend will parse ?ids=1&ids=2
+      },
+    );
 
     final response = await http.get(uri, headers: _headers);
 
     if (response.statusCode == 200) {
-      final List data = jsonDecode(response.body);
-      return data.map((json) => ProductModel.fromJson(json)).toList();
+      final decoded = jsonDecode(response.body);
+
+      if (decoded is Map<String, dynamic> && decoded.containsKey('results')) {
+        final List<dynamic> data = decoded['results'];
+        return data.map((json) => ProductModel.fromJson(json)).toList();
+      } else {
+        throw Exception('Unexpected API response format: $decoded');
+      }
     } else {
       throw Exception(
-          'Failed to load products by ids: ${response.statusCode} ${response.body}');
+        'Failed to load products by ids: ${response.statusCode} ${response.body}',
+      );
     }
   }
 

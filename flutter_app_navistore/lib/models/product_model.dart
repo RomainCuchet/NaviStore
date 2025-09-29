@@ -43,7 +43,7 @@ class ProductModel extends HiveObject {
       category: json['category'] ?? '',
       price: (json['first_product_price'] as num?)?.toDouble() ?? 0.0,
       imagePath: json['image_url'] ?? '',
-      isAvailable: true, // ou calculé selon ton API
+      isAvailable: true,
     );
   }
 
@@ -57,6 +57,27 @@ class ProductModel extends HiveObject {
       'price': price,
       'image': imagePath,
     };
+  }
+
+  /// Creates a new ProductModel with updated fields
+  ProductModel copyWith({
+    String? id,
+    String? name,
+    bool? isAvailable,
+    String? brand,
+    String? category,
+    double? price,
+    String? imagePath,
+  }) {
+    return ProductModel(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      isAvailable: isAvailable ?? this.isAvailable,
+      brand: brand ?? this.brand,
+      category: category ?? this.category,
+      price: price ?? this.price,
+      imagePath: imagePath ?? this.imagePath,
+    );
   }
 
   Future<void> saveToHive() async {

@@ -8526,17 +8526,6 @@
     },
     {
         "brand": "",
-        "title": "Bouquet de 15 mini œillets Arlequin",
-        "image_url": "https://nos-catalogues-promos-v2.e.leclerc/media/c86dd899ca357395d4f34ccd58e773ff?g=300x300",
-        "packaging_type": "Le bouquet",
-        "first_product_price": 4.5,
-        "second_product_price": null,
-        "price_per_measurement_unit": null,
-        "category": "Plein air, Loisirs",
-        "id": 776
-    },
-    {
-        "brand": "",
         "title": "Bouquet de 20 roses",
         "image_url": "https://nos-catalogues-promos-v2.e.leclerc/media/666655c78abb06dd5429e572b60657fa?g=300x300",
         "packaging_type": "Le bouquet",
@@ -8556,28 +8545,6 @@
         "price_per_measurement_unit": null,
         "category": "Plein air, Loisirs",
         "id": 778
-    },
-    {
-        "brand": "",
-        "title": "Terrarium 2 plantes avec LED",
-        "image_url": "https://nos-catalogues-promos-v2.e.leclerc/media/aaf874e66df2ae11e6ade3d1768d81f7?g=300x300",
-        "packaging_type": "L'unité",
-        "first_product_price": 11.9,
-        "second_product_price": null,
-        "price_per_measurement_unit": null,
-        "category": "Plein air, Loisirs",
-        "id": 779
-    },
-    {
-        "brand": "SOLDOR",
-        "title": "TERREAU HORTICOLE",
-        "image_url": "https://nos-catalogues-promos-v2.e.leclerc/media/26cc8ec3a9e85225c767e5d87fe0427e?g=300x300",
-        "packaging_type": "L'unité",
-        "first_product_price": 5.9,
-        "second_product_price": null,
-        "price_per_measurement_unit": null,
-        "category": "Plein air, Loisirs",
-        "id": 780
     },
     {
         "brand": "ENERGIZER",

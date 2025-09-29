@@ -5,38 +5,41 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:english_words/english_words.dart';
 
 import 'services/product_api_service.dart';
+import 'services/product_api_sync_service.dart';
 import 'widgets/pages/shopping_lists_page.dart';
 import 'widgets/pages/browse_products_page.dart';
 import 'models/product_model.dart';
 import 'models/shopping_list_model.dart';
 
-import 'tools.dart';
-
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load(fileName: ".env");
 
-  final productService = ProductApiService(
+  // Initialisation Hive
+  await Hive.initFlutter();
+  Hive.registerAdapter(ProductModelAdapter());
+  Hive.registerAdapter(ShoppingListModelAdapter());
+
+  // Ouvre les boxes Hive
+  final shoppingListsBox =
+      await Hive.openBox<ShoppingListModel>('shopping_lists');
+  await Hive.openBox<ProductModel>('products');
+
+  // Crée le service API
+  final apiService = ProductApiService(
     baseUrl: dotenv.env['API_URL'] ?? 'http://localhost:8000',
     apiKey: dotenv.env['API_KEY'] ?? '',
   );
 
-  await Hive.initFlutter();
-
-  // For development: reset Hive boxes on each startup
-  // in the terminal : flutter packages pub run build_runner build --delete-conflicting-outputs
-  // await deleteHiveBox('products');
-  // await deleteHiveBox('shopping_lists');
-
-  Hive.registerAdapter(ProductModelAdapter());
-  Hive.registerAdapter(ShoppingListModelAdapter());
-  await Hive.openBox<ProductModel>('products');
-  await Hive.openBox<ShoppingListModel>('shopping_lists');
+  // Synchronisation des produits au démarrage
+  final syncService = ProductApiSyncService(apiService);
+  final allLists = shoppingListsBox.values.toList();
+  await syncService.syncProducts(allLists);
 
   runApp(
     MultiProvider(
       providers: [
-        Provider<ProductApiService>.value(value: productService),
+        Provider<ProductApiService>.value(value: apiService),
         ChangeNotifierProvider(create: (_) => MyAppState()),
       ],
       child: const MyApp(),
@@ -46,6 +49,8 @@ Future<void> main() async {
 
 class MyAppState extends ChangeNotifier {
   var current = WordPair.random();
+  var favorites = <WordPair>[];
+
   void getNext() {
     current = WordPair.random();
     notifyListeners();
@@ -59,8 +64,6 @@ class MyAppState extends ChangeNotifier {
     }
     notifyListeners();
   }
-
-  var favorites = <WordPair>[];
 }
 
 class MyApp extends StatelessWidget {
@@ -102,7 +105,7 @@ class _MyHomePageState extends State<MyHomePage> {
         page = const GeneratorPage();
         break;
       case 1:
-        page = const ShoppingListsPage(); // ✅ nouvelle page
+        page = const ShoppingListsPage();
         break;
       case 2:
         page = BrowseProductsPage(api: productService);
@@ -121,22 +124,15 @@ class _MyHomePageState extends State<MyHomePage> {
                   extended: constraints.maxWidth >= 600,
                   destinations: const [
                     NavigationRailDestination(
-                      icon: Icon(Icons.home),
-                      label: Text('Home'),
-                    ),
+                        icon: Icon(Icons.home), label: Text('Home')),
                     NavigationRailDestination(
-                      icon: Icon(Icons.list),
-                      label: Text('Shopping Lists'),
-                    ),
+                        icon: Icon(Icons.list), label: Text('Shopping Lists')),
                     NavigationRailDestination(
-                      icon: Icon(Icons.search),
-                      label: Text('Products'),
-                    ),
+                        icon: Icon(Icons.search), label: Text('Products')),
                   ],
                   selectedIndex: selectedIndex,
-                  onDestinationSelected: (value) {
-                    setState(() => selectedIndex = value);
-                  },
+                  onDestinationSelected: (value) =>
+                      setState(() => selectedIndex = value),
                 ),
               ),
               Expanded(
@@ -161,7 +157,6 @@ class GeneratorPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final appState = context.watch<MyAppState>();
     final pair = appState.current;
-
     final icon = appState.favorites.contains(pair)
         ? Icons.favorite
         : Icons.favorite_border;
@@ -195,7 +190,6 @@ class GeneratorPage extends StatelessWidget {
 
 class BigCard extends StatelessWidget {
   const BigCard({super.key, required this.pair});
-
   final WordPair pair;
 
   @override

@@ -99,7 +99,7 @@ class _BrowseProductsPageState extends State<BrowseProductsPage> {
 
   Future<void> _onProductTap(ProductModel product) async {
     final repo = ShoppingListRepository();
-    final lists = await repo.getAllLists();
+    final lists = await repo.getAllShoppingLists();
 
     showModalBottomSheet(
       context: context,
@@ -110,11 +110,12 @@ class _BrowseProductsPageState extends State<BrowseProductsPage> {
           ...lists.map((list) => ListTile(
                 title: Text(list.name),
                 onTap: () async {
-                  // On ajoute le produit directement dans la liste
-                  list.products.add(product);
-                  await list.saveToHive();
-                  // On enregistre le produit dans Hive si besoin
+                  // Sauvegarde le produit dans Hive (box "products")
                   await product.saveToHive();
+
+                  // Ajoute uniquement son ID à la liste
+                  await repo.addProductToList(list.id, product.id.toString());
+
                   Navigator.pop(ctx);
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
@@ -126,13 +127,17 @@ class _BrowseProductsPageState extends State<BrowseProductsPage> {
           ListTile(
             title: const Text("Créer une nouvelle liste"),
             onTap: () async {
+              // Sauvegarde du produit dans Hive
+              await product.saveToHive();
+
+              // Crée une nouvelle liste avec uniquement son ID
               final newList = ShoppingListModel(
                 id: DateTime.now().millisecondsSinceEpoch.toString(),
                 name: "Nouvelle liste",
-                products: [product],
+                productIds: [product.id.toString()],
               );
-              await ShoppingListRepository().addShoppingList(newList);
-              await product.saveToHive();
+              await repo.addShoppingList(newList);
+
               Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
