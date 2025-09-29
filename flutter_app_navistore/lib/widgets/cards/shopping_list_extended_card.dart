@@ -1,15 +1,17 @@
 import 'package:flutter/material.dart';
-import 'product_list_card.dart';
 import '../../models/product_model.dart';
+import '../../models/shopping_list_model.dart';
+import '../../repositories/shopping_list_repository.dart';
+import 'product_list_card.dart';
 
 class ShoppingListExtendedCard extends StatefulWidget {
-  final String listName;
-  final List<ProductModel> products;
+  final ShoppingListModel shoppingList;
+  final VoidCallback? onDelete; // callback pour suppression de la liste
 
   const ShoppingListExtendedCard({
     super.key,
-    required this.listName,
-    required this.products,
+    required this.shoppingList,
+    this.onDelete,
   });
 
   @override
@@ -18,19 +20,60 @@ class ShoppingListExtendedCard extends StatefulWidget {
 }
 
 class _ShoppingListExtendedCardState extends State<ShoppingListExtendedCard> {
-  bool _showInOtherView = false; // état du toggle
+  late List<ProductModel> products;
+  bool _showInOtherView = false;
 
-  double get totalAvailable => widget.products
-      .where((p) => p.isAvailable)
-      .fold(0, (sum, p) => sum + p.price);
+  @override
+  void initState() {
+    super.initState();
+    // Clonage pour modification locale
+    products = List<ProductModel>.from(widget.shoppingList.products);
+  }
 
-  double get totalAll => widget.products.fold(0, (sum, p) => sum + p.price);
+  double get totalAvailable =>
+      products.where((p) => p.isAvailable).fold(0, (sum, p) => sum + p.price);
+
+  double get totalAll => products.fold(0, (sum, p) => sum + p.price);
+
+  Future<void> _deleteProduct(ProductModel product) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Supprimer le produit ?"),
+        content: Text("Voulez-vous vraiment supprimer '${product.name}' ?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text("Annuler"),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text("Supprimer"),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      setState(() => products.remove(product));
+
+      // Mise à jour Hive
+      final repo = ShoppingListRepository();
+      final updatedList = ShoppingListModel(
+        id: widget.shoppingList.id,
+        name: widget.shoppingList.name,
+        products: List<ProductModel>.from(products),
+      );
+      await repo.updateShoppingList(updatedList);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    final sortedProducts = List<ProductModel>.from(widget.products)
+    // Tri : disponibles en haut
+    final sortedProducts = List<ProductModel>.from(products)
       ..sort((a, b) {
         if (a.isAvailable && !b.isAvailable) return -1;
         if (!a.isAvailable && b.isAvailable) return 1;
@@ -58,12 +101,13 @@ class _ShoppingListExtendedCardState extends State<ShoppingListExtendedCard> {
                       return ProductListCard(
                         product: product,
                         strikeFields: !product.isAvailable,
+                        onDelete: () => _deleteProduct(product),
                       );
                     },
                   ),
                 ),
 
-                // 🔹 Nom de la liste + switch toggle
+                // Nom de la liste + switch
                 Positioned(
                   top: 16,
                   left: 16,
@@ -72,7 +116,7 @@ class _ShoppingListExtendedCardState extends State<ShoppingListExtendedCard> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        widget.listName,
+                        widget.shoppingList.name,
                         style: theme.textTheme.headlineSmall?.copyWith(
                           fontWeight: FontWeight.bold,
                           color: theme.colorScheme.onSurface,
@@ -89,15 +133,12 @@ class _ShoppingListExtendedCardState extends State<ShoppingListExtendedCard> {
                               fontWeight: FontWeight.bold,
                             ),
                           ),
-                          Padding(padding: const EdgeInsets.only(right: 8)),
+                          const SizedBox(width: 8),
                           Switch.adaptive(
                             value: _showInOtherView,
                             activeColor: theme.colorScheme.primary,
                             onChanged: (val) {
                               setState(() => _showInOtherView = val);
-                              print(
-                                "Toggle list '${widget.listName}' -> $val",
-                              );
                             },
                           ),
                         ],
@@ -129,7 +170,7 @@ class _ShoppingListExtendedCardState extends State<ShoppingListExtendedCard> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          "Available ${widget.products.where((p) => p.isAvailable).length}/${widget.products.length}",
+                          "Available ${products.where((p) => p.isAvailable).length}/${products.length}",
                           style: theme.textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.bold,
                             color: theme.colorScheme.primary,
@@ -144,6 +185,41 @@ class _ShoppingListExtendedCardState extends State<ShoppingListExtendedCard> {
                         ),
                       ],
                     ),
+                  ),
+                ),
+
+                // Bouton supprimer la liste
+                Positioned(
+                  top: 16,
+                  right: 60,
+                  child: IconButton(
+                    icon: Icon(Icons.delete_outline,
+                        size: 28, color: theme.colorScheme.error),
+                    onPressed: () async {
+                      final confirmed = await showDialog<bool>(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          title: const Text("Supprimer la liste ?"),
+                          content: Text(
+                              "Voulez-vous vraiment supprimer la liste '${widget.shoppingList.name}' ?"),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.of(ctx).pop(false),
+                              child: const Text("Annuler"),
+                            ),
+                            TextButton(
+                              onPressed: () => Navigator.of(ctx).pop(true),
+                              child: const Text("Supprimer"),
+                            ),
+                          ],
+                        ),
+                      );
+
+                      if (confirmed == true && widget.onDelete != null) {
+                        widget.onDelete!();
+                        Navigator.of(context).pop();
+                      }
+                    },
                   ),
                 ),
               ],

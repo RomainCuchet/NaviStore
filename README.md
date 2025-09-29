@@ -11,3 +11,8 @@ Elastic Search is a powerful distributed search engine that perfectly suits our 
 
 ## Implementation Notes
 - To delete index in developer mode: `Invoke-RestMethod -Method Delete -Uri "http://localhost:9200/products"`
+
+## Setup during developpement
+- Launch docker desktop
+- run from root: `docker compose up`
+- run in flutter_app_navistore: `flutter run`

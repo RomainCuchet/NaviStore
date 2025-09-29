@@ -1,38 +1,29 @@
 import 'package:flutter/material.dart';
-import '../../models/product_model.dart';
+import '../../models/shopping_list_model.dart';
 import 'shopping_list_extended_card.dart';
 
 class ShoppingListCard extends StatelessWidget {
-  final String name;
+  final ShoppingListModel shoppingList;
   final IconData icon;
-  final List<String> ids;
-  final List<ProductModel> products; // ✅ ajout
+  final VoidCallback? onDelete; // callback pour la suppression
 
   const ShoppingListCard({
-    Key? key,
-    required this.name,
+    super.key,
+    required this.shoppingList,
     required this.icon,
-    required this.ids,
-    required this.products, // ✅ ajout
-  }) : super(key: key);
+    this.onDelete,
+  });
 
-  Future<void> _openExtendedCard(BuildContext context) async {
-    try {
-      // Utilise maintenant les produits réels
-      Navigator.of(context).push(
-        PageRouteBuilder(
-          opaque: false,
-          pageBuilder: (_, __, ___) => ShoppingListExtendedCard(
-            listName: name,
-            products: products,
-          ),
+  void _openExtendedCard(BuildContext context) {
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        opaque: false,
+        pageBuilder: (_, __, ___) => ShoppingListExtendedCard(
+          shoppingList: shoppingList, // passe l'objet complet
+          onDelete: onDelete, // callback pour supprimer la liste
         ),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Impossible de charger les produits : $e")),
-      );
-    }
+      ),
+    );
   }
 
   @override
@@ -47,32 +38,50 @@ class ShoppingListCard extends StatelessWidget {
         onTap: () => _openExtendedCard(context),
         child: Padding(
           padding: const EdgeInsets.all(16.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+          child: Stack(
             children: [
-              CircleAvatar(
-                radius: 32,
-                backgroundColor: theme.colorScheme.primaryContainer,
-                child: Icon(
-                  icon,
-                  size: 32,
-                  color: theme.colorScheme.onPrimaryContainer,
-                ),
+              // Contenu principal
+              Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircleAvatar(
+                    radius: 32,
+                    backgroundColor: theme.colorScheme.primaryContainer,
+                    child: Icon(
+                      icon,
+                      size: 32,
+                      color: theme.colorScheme.onPrimaryContainer,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    shoppingList.name,
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: theme.colorScheme.onSurface,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    "${shoppingList.products.length} produit${shoppingList.products.length > 1 ? 's' : ''}",
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 12),
-              Text(
-                name,
-                textAlign: TextAlign.center,
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: theme.colorScheme.onSurface,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                "${ids.length} produit${ids.length > 1 ? 's' : ''}",
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
+
+              // Bouton supprimer
+              Positioned(
+                top: 0,
+                right: 0,
+                child: IconButton(
+                  icon: Icon(
+                    Icons.delete_outline,
+                    color: theme.colorScheme.error,
+                  ),
+                  onPressed: onDelete,
                 ),
               ),
             ],

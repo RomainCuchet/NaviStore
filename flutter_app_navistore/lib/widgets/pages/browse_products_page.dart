@@ -63,9 +63,7 @@ class _BrowseProductsPageState extends State<BrowseProductsPage> {
     });
 
     try {
-      final fetched = await widget.api.getProducts(
-        title: searchQuery,
-      );
+      final fetched = await widget.api.getProducts(title: searchQuery);
       setState(() {
         allResults = fetched;
         _applyFilters();
@@ -99,7 +97,7 @@ class _BrowseProductsPageState extends State<BrowseProductsPage> {
     });
   }
 
-  void _onProductTap(ProductModel product) async {
+  Future<void> _onProductTap(ProductModel product) async {
     final repo = ShoppingListRepository();
     final lists = await repo.getAllLists();
 
@@ -112,8 +110,16 @@ class _BrowseProductsPageState extends State<BrowseProductsPage> {
           ...lists.map((list) => ListTile(
                 title: Text(list.name),
                 onTap: () async {
-                  await repo.addProductToList(list.id, product);
+                  // On ajoute le produit directement dans la liste
+                  list.products.add(product);
+                  await list.saveToHive();
+                  // On enregistre le produit dans Hive si besoin
+                  await product.saveToHive();
                   Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                        content: Text("${product.name} ajouté à ${list.name}")),
+                  );
                 },
               )),
           const Divider(),
@@ -123,11 +129,15 @@ class _BrowseProductsPageState extends State<BrowseProductsPage> {
               final newList = ShoppingListModel(
                 id: DateTime.now().millisecondsSinceEpoch.toString(),
                 name: "Nouvelle liste",
-                productIds: [product.id],
+                products: [product],
               );
-              await repo.addShoppingList(newList);
+              await ShoppingListRepository().addShoppingList(newList);
               await product.saveToHive();
               Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                    content: Text("${product.name} ajouté à ${newList.name}")),
+              );
             },
           ),
         ],
@@ -174,7 +184,7 @@ class _BrowseProductsPageState extends State<BrowseProductsPage> {
             ),
           ),
 
-          // Filtres Category avec autocomplete
+          // Filtre catégorie
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8.0),
             child: Column(
@@ -186,7 +196,7 @@ class _BrowseProductsPageState extends State<BrowseProductsPage> {
                 ),
                 const SizedBox(height: 4),
                 Autocomplete<String>(
-                  optionsBuilder: (TextEditingValue textEditingValue) {
+                  optionsBuilder: (textEditingValue) {
                     if (textEditingValue.text.isEmpty)
                       return availableCategories;
                     return availableCategories.where((cat) => cat
@@ -227,7 +237,7 @@ class _BrowseProductsPageState extends State<BrowseProductsPage> {
             ),
           ),
 
-          // Chips affichant le filtre actif
+          // Chip filtre actif
           if (selectedCategory != null)
             Padding(
               padding: const EdgeInsets.all(8.0),

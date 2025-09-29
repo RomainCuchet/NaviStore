@@ -1,13 +1,16 @@
-import 'package:english_words/english_words.dart';
 import 'package:flutter/material.dart';
-import 'package:namer_app/services/product_api_service.dart';
 import 'package:provider/provider.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:english_words/english_words.dart';
+
+import 'services/product_api_service.dart';
 import 'widgets/pages/shopping_lists_page.dart';
 import 'widgets/pages/browse_products_page.dart';
 import 'models/product_model.dart';
 import 'models/shopping_list_model.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
+
+import 'tools.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -19,6 +22,12 @@ Future<void> main() async {
   );
 
   await Hive.initFlutter();
+
+  // For development: reset Hive boxes on each startup
+  // in the terminal : flutter packages pub run build_runner build --delete-conflicting-outputs
+  // await deleteHiveBox('products');
+  // await deleteHiveBox('shopping_lists');
+
   Hive.registerAdapter(ProductModelAdapter());
   Hive.registerAdapter(ShoppingListModelAdapter());
   await Hive.openBox<ProductModel>('products');
@@ -33,26 +42,6 @@ Future<void> main() async {
       child: const MyApp(),
     ),
   );
-}
-
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (context) => MyAppState(),
-      child: MaterialApp(
-        title: 'NaviMall',
-        theme: ThemeData(
-          useMaterial3: true,
-          colorScheme: ColorScheme.fromSeed(
-              seedColor: const Color.fromARGB(255, 41, 61, 240)),
-        ),
-        home: MyHomePage(),
-      ),
-    );
-  }
 }
 
 class MyAppState extends ChangeNotifier {
@@ -74,108 +63,127 @@ class MyAppState extends ChangeNotifier {
   var favorites = <WordPair>[];
 }
 
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'NaviMall',
+      theme: ThemeData(
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color.fromARGB(255, 41, 61, 240),
+        ),
+      ),
+      home: const MyHomePage(),
+    );
+  }
+}
+
 class MyHomePage extends StatefulWidget {
+  const MyHomePage({super.key});
+
   @override
   State<MyHomePage> createState() => _MyHomePageState();
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  var selectedIndex = 0;
+  int selectedIndex = 0;
 
+  @override
   Widget build(BuildContext context) {
-    Widget page;
     final productService =
         Provider.of<ProductApiService>(context, listen: false);
+
+    Widget page;
     switch (selectedIndex) {
       case 0:
-        page = GeneratorPage();
+        page = const GeneratorPage();
         break;
       case 1:
-        page = ShoppingListsPage();
+        page = const ShoppingListsPage(); // ✅ nouvelle page
         break;
       case 2:
         page = BrowseProductsPage(api: productService);
         break;
       default:
-        throw UnimplementedError('no widget for $selectedIndex');
+        throw UnimplementedError('No page for $selectedIndex');
     }
-    return LayoutBuilder(builder: (context, constraints) {
-      return Scaffold(
-        body: Row(
-          children: [
-            SafeArea(
-              child: NavigationRail(
-                extended: constraints.maxWidth >= 600,
-                destinations: [
-                  NavigationRailDestination(
-                    icon: Icon(Icons.home),
-                    label: Text('Home'),
-                  ),
-                  NavigationRailDestination(
-                    icon: Icon(Icons.list),
-                    label: Text('Shopping Lists'),
-                  ),
-                  NavigationRailDestination(
-                    icon: Icon(Icons.search),
-                    label: Text('Products'),
-                  ),
-                ],
-                selectedIndex: selectedIndex,
-                onDestinationSelected: (value) {
-                  setState(() {
-                    selectedIndex = value;
-                  });
-                },
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return Scaffold(
+          body: Row(
+            children: [
+              SafeArea(
+                child: NavigationRail(
+                  extended: constraints.maxWidth >= 600,
+                  destinations: const [
+                    NavigationRailDestination(
+                      icon: Icon(Icons.home),
+                      label: Text('Home'),
+                    ),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.list),
+                      label: Text('Shopping Lists'),
+                    ),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.search),
+                      label: Text('Products'),
+                    ),
+                  ],
+                  selectedIndex: selectedIndex,
+                  onDestinationSelected: (value) {
+                    setState(() => selectedIndex = value);
+                  },
+                ),
               ),
-            ),
-            Expanded(
-              child: Container(
-                color: Theme.of(context).colorScheme.primaryContainer,
-                child: page,
+              Expanded(
+                child: Container(
+                  color: Theme.of(context).colorScheme.primaryContainer,
+                  child: page,
+                ),
               ),
-            ),
-          ],
-        ),
-      );
-    });
+            ],
+          ),
+        );
+      },
+    );
   }
 }
 
+// ---------------- GeneratorPage ----------------
 class GeneratorPage extends StatelessWidget {
+  const GeneratorPage({super.key});
+
   @override
   Widget build(BuildContext context) {
-    var appState = context.watch<MyAppState>();
-    var pair = appState.current;
+    final appState = context.watch<MyAppState>();
+    final pair = appState.current;
 
-    IconData icon;
-    if (appState.favorites.contains(pair)) {
-      icon = Icons.favorite;
-    } else {
-      icon = Icons.favorite_border;
-    }
+    final icon = appState.favorites.contains(pair)
+        ? Icons.favorite
+        : Icons.favorite_border;
 
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           BigCard(pair: pair),
-          SizedBox(height: 10),
+          const SizedBox(height: 10),
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               ElevatedButton.icon(
-                onPressed: () {
-                  appState.toggleFavorite(pair);
-                },
+                onPressed: () => appState.toggleFavorite(pair),
                 icon: Icon(icon),
-                label: Text('Like'),
+                label: const Text('Like'),
               ),
-              SizedBox(width: 10),
+              const SizedBox(width: 10),
               ElevatedButton(
-                onPressed: () {
-                  appState.getNext();
-                },
-                child: Text('Next'),
+                onPressed: () => appState.getNext(),
+                child: const Text('Next'),
               ),
             ],
           ),
@@ -186,17 +194,14 @@ class GeneratorPage extends StatelessWidget {
 }
 
 class BigCard extends StatelessWidget {
-  const BigCard({
-    super.key,
-    required this.pair,
-  });
+  const BigCard({super.key, required this.pair});
 
   final WordPair pair;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final style = theme.textTheme.displayMedium!.copyWith(
+    final style = theme.textTheme.displayMedium?.copyWith(
       color: theme.colorScheme.onPrimary,
     );
 
@@ -204,8 +209,11 @@ class BigCard extends StatelessWidget {
       color: theme.colorScheme.primary,
       child: Padding(
         padding: const EdgeInsets.all(20),
-        child: Text(pair.asLowerCase,
-            style: style, semanticsLabel: "${pair.first} ${pair.second}"),
+        child: Text(
+          pair.asLowerCase,
+          style: style,
+          semanticsLabel: '${pair.first} ${pair.second}',
+        ),
       ),
     );
   }

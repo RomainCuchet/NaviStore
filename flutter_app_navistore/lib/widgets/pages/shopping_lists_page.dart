@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-import '../cards/shopping_list_card.dart';
 import '../../models/shopping_list_model.dart';
-import '../../models/product_model.dart';
+import '../../repositories/shopping_list_repository.dart';
+import '../cards/shopping_list_card.dart';
 
 class ShoppingListsPage extends StatefulWidget {
   const ShoppingListsPage({super.key});
@@ -12,45 +12,73 @@ class ShoppingListsPage extends StatefulWidget {
 }
 
 class _ShoppingListsPageState extends State<ShoppingListsPage> {
-  late Box<ShoppingListModel> shoppingListBox;
-  late Box<ProductModel> productBox;
+  late ShoppingListRepository repo;
 
   @override
   void initState() {
     super.initState();
-    shoppingListBox = Hive.box<ShoppingListModel>('shopping_lists');
-    productBox = Hive.box<ProductModel>('products');
+    repo = ShoppingListRepository();
   }
 
-  List<ProductModel> _getProductsForList(List<String> ids) {
-    return ids
-        .map((id) => productBox.get(id))
-        .whereType<ProductModel>() // filtre les nulls
-        .toList();
+  Future<void> _deleteList(BuildContext context, ShoppingListModel list) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Supprimer la liste ?"),
+        content:
+            Text("Voulez-vous vraiment supprimer la liste '${list.name}' ?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text("Annuler"),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text("Supprimer"),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await repo.deleteShoppingList(list.id);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final lists = shoppingListBox.values.toList();
+    final box = Hive.box<ShoppingListModel>('shopping_lists');
 
-    if (lists.isEmpty) {
-      return const Center(child: Text('Aucune liste enregistrée'));
-    }
+    return Scaffold(
+      appBar: AppBar(title: const Text("Shopping Lists")),
+      body: ValueListenableBuilder(
+        valueListenable: box.listenable(),
+        builder: (context, Box<ShoppingListModel> box, _) {
+          final lists = box.values.toList();
 
-    return GridView.count(
-      padding: const EdgeInsets.all(16),
-      crossAxisCount: 2,
-      crossAxisSpacing: 16,
-      mainAxisSpacing: 16,
-      children: lists.map((list) {
-        final products = _getProductsForList(list.productIds);
-        return ShoppingListCard(
-          name: list.name,
-          icon: Icons.list,
-          ids: list.productIds,
-          products: products,
-        );
-      }).toList(),
+          if (lists.isEmpty) {
+            return const Center(child: Text('Aucune liste enregistrée'));
+          }
+
+          return GridView.builder(
+            padding: const EdgeInsets.all(16),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              crossAxisSpacing: 16,
+              mainAxisSpacing: 16,
+            ),
+            itemCount: lists.length,
+            itemBuilder: (_, index) {
+              final list = lists[index];
+              return ShoppingListCard(
+                shoppingList: list,
+                icon: Icons.list,
+                onDelete: () => _deleteList(context, list),
+              );
+            },
+          );
+        },
+      ),
     );
   }
 }

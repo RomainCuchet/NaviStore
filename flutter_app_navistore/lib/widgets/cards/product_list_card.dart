@@ -4,11 +4,13 @@ import '../../models/product_model.dart';
 class ProductListCard extends StatelessWidget {
   final ProductModel product;
   final bool strikeFields;
+  final VoidCallback? onDelete;
 
   const ProductListCard({
     super.key,
     required this.product,
     this.strikeFields = false,
+    this.onDelete,
   });
 
   @override
@@ -48,6 +50,22 @@ class ProductListCard extends StatelessWidget {
                       return Image.asset(
                         'assets/icons/default_product_icon.png',
                         fit: BoxFit.cover,
+                      );
+                    },
+                    loadingBuilder: (context, child, loadingProgress) {
+                      if (loadingProgress == null) return child;
+                      return Center(
+                        child: SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            value: loadingProgress.expectedTotalBytes != null
+                                ? loadingProgress.cumulativeBytesLoaded /
+                                    (loadingProgress.expectedTotalBytes ?? 1)
+                                : null,
+                          ),
+                        ),
                       );
                     },
                   ),
@@ -112,8 +130,39 @@ class ProductListCard extends StatelessWidget {
               child: IconButton(
                 icon: Icon(Icons.delete_outline,
                     color: theme.colorScheme.primary),
-                onPressed: () {
-                  print("Delete product: ${product.id}");
+                onPressed: () async {
+                  // Option 1 : appel direct du callback s'il est fourni
+                  if (onDelete != null) {
+                    onDelete!.call();
+                    return;
+                  }
+
+                  // Option 2 : si pas de callback, on propose une confirmation puis on ferme (fallback)
+                  final confirmed = await showDialog<bool>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: const Text('Supprimer'),
+                      content: Text("Supprimer '${product.name}' ?"),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.of(ctx).pop(false),
+                          child: const Text('Annuler'),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.of(ctx).pop(true),
+                          child: const Text('Supprimer'),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirmed == true) {
+                    // fallback : juste affichage d'un message
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                          content:
+                              Text("Suppression demandée: ${product.name}")),
+                    );
+                  }
                 },
               ),
             ),

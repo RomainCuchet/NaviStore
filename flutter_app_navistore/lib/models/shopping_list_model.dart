@@ -1,4 +1,5 @@
 import 'package:hive/hive.dart';
+import 'product_model.dart';
 
 part 'shopping_list_model.g.dart';
 
@@ -11,19 +12,21 @@ class ShoppingListModel extends HiveObject {
   final String name;
 
   @HiveField(2)
-  final List<String> productIds;
+  final List<ProductModel> products;
 
   ShoppingListModel({
     required this.id,
     required this.name,
-    required this.productIds,
+    required this.products,
   });
 
   factory ShoppingListModel.fromJson(Map<String, dynamic> json) {
     return ShoppingListModel(
       id: json['id'] as String,
       name: json['name'] as String,
-      productIds: List<String>.from(json['productIds'] as List),
+      products: (json['products'] as List)
+          .map((e) => ProductModel.fromJson(e as Map<String, dynamic>))
+          .toList(),
     );
   }
 
@@ -31,7 +34,7 @@ class ShoppingListModel extends HiveObject {
     return {
       'id': id,
       'name': name,
-      'productIds': productIds,
+      'products': products.map((p) => p.toJson()).toList(),
     };
   }
 
