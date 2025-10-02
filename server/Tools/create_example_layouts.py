@@ -131,7 +131,7 @@ def create_supermarket_layout() -> Tuple[np.ndarray, float]:
 
 def save_example_layouts():
     """Sauvegarde les exemples de layouts."""
-    examples_dir = "examples"
+    examples_dir = "../assets/layout_examples"
     os.makedirs(examples_dir, exist_ok=True)
 
     layouts = [

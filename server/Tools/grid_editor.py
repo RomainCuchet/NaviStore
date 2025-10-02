@@ -100,6 +100,11 @@ class GridEditor:
         self.current_tool = 0  # 0=navigable, -1=obstacle, 1=POI
         self.mouse_pressed = False
 
+        # Mode coordonnées
+        self.coordinate_mode = False
+        self.last_clicked_cell = None
+        self.last_clicked_coords = None
+
         # Boutons de l'interface
         self.buttons = self._create_buttons()
 
@@ -127,8 +132,9 @@ class GridEditor:
             ("Sauver", self._save_grid, 250),
             ("Reset", self._reset_grid, 350),
             ("Taille", self._resize_grid, 450),
-            ("Aide", self._show_help, 550),
-            ("Quitter", self._quit_editor, 650),
+            ("Coord", self._toggle_coordinate_mode, 550),
+            ("Aide", self._show_help, 650),
+            ("Quitter", self._quit_editor, 750),
         ]
 
         for text, callback, x_pos in button_configs:
@@ -343,6 +349,53 @@ class GridEditor:
             )
             self.screen.blit(label_text, (info_rect.x + 40, y_offset + i * 22 + 2))
 
+        y_offset += len(legend_items) * 22 + 15
+
+        # Section Mode Coordonnées
+        coord_title_color = (0, 100, 200) if self.coordinate_mode else COLORS["text"]
+        coord_title = (
+            "🎯 Mode Coordonnées" if self.coordinate_mode else "Mode Coordonnées"
+        )
+        self._draw_section_title(
+            coord_title, info_rect.x + 10, info_rect.y + y_offset, coord_title_color
+        )
+        y_offset += section_spacing
+
+        if self.coordinate_mode:
+            coord_info = [
+                "🟢 ACTIF - Cliquez sur une case",
+                "pour voir ses coordonnées",
+            ]
+
+            if self.last_clicked_cell:
+                gx, gy = self.last_clicked_cell
+                world_x, world_y = self.last_clicked_coords
+                cell_value = self.grid[gy, gx]
+
+                value_names = {0: "libre", 1: "POI", -1: "obstacle"}
+                value_name = value_names.get(cell_value, "inconnu")
+
+                coord_info.extend(
+                    [
+                        "",
+                        f"Dernière case cliquée:",
+                        f"• Grille: ({gx}, {gy})",
+                        f"• Monde: ({world_x:.1f}, {world_y:.1f}) cm",
+                        f"• Type: {value_name} ({cell_value})",
+                    ]
+                )
+        else:
+            coord_info = [
+                "🔘 INACTIF - Cliquez sur 'Coord'",
+                "pour activer le mode",
+            ]
+
+        for text in coord_info:
+            text_color = (0, 100, 200) if self.coordinate_mode else COLORS["text"]
+            text_surface = self.small_font.render(text, True, text_color)
+            self.screen.blit(text_surface, (info_rect.x + 15, info_rect.y + y_offset))
+            y_offset += line_spacing
+
         # Indicateur de modifications en haut
         if self.has_changes:
             changes_text = self.font.render(
@@ -353,10 +406,13 @@ class GridEditor:
             saved_text = self.small_font.render("✅ Sauvegardé", True, (0, 150, 0))
             self.screen.blit(saved_text, (10, 15))
 
-    def _draw_section_title(self, title: str, x: int, y: int):
+    def _draw_section_title(self, title: str, x: int, y: int, color=None):
         """Dessine un titre de section."""
+        if color is None:
+            color = COLORS["text"]
+
         # Fond coloré pour le titre
-        title_surface = self.font.render(title, True, COLORS["text"])
+        title_surface = self.font.render(title, True, color)
         title_rect = pygame.Rect(
             x - 5, y - 2, title_surface.get_width() + 10, title_surface.get_height() + 4
         )
@@ -372,15 +428,22 @@ class GridEditor:
             # Vérifier survol
             button["hovered"] = button["rect"].collidepoint(mouse_pos)
 
-            # Couleur du bouton
-            color = COLORS["button_hover"] if button["hovered"] else COLORS["button"]
+            # Couleur spéciale pour le bouton Coord si actif
+            if button["text"] == "Coord" and self.coordinate_mode:
+                color = (100, 150, 255)  # Bleu pour mode actif
+                text_color = (255, 255, 255)  # Texte blanc
+            else:
+                color = (
+                    COLORS["button_hover"] if button["hovered"] else COLORS["button"]
+                )
+                text_color = COLORS["text"]
 
             # Dessiner bouton
             pygame.draw.rect(self.screen, color, button["rect"])
             pygame.draw.rect(self.screen, COLORS["grid_line"], button["rect"], 2)
 
             # Texte du bouton
-            text_surface = self.small_font.render(button["text"], True, COLORS["text"])
+            text_surface = self.small_font.render(button["text"], True, text_color)
             text_rect = text_surface.get_rect(center=button["rect"].center)
             self.screen.blit(text_surface, text_rect)
 
@@ -392,11 +455,25 @@ class GridEditor:
                 ui_button["callback"]()
                 return
 
-        # Modification de la grille
+        # Obtenir position dans la grille
         grid_pos = self._get_grid_pos(pos)
         if grid_pos:
             gx, gy = grid_pos
 
+            # Mode coordonnées : afficher les informations
+            if self.coordinate_mode:
+                world_x, world_y = self._calculate_world_coordinates(gx, gy)
+                self.last_clicked_cell = (gx, gy)
+                self.last_clicked_coords = (world_x, world_y)
+
+                # Afficher dans la console
+                print(f"🎯 Coordonnées de la case:")
+                print(f"   Grille: ({gx}, {gy})")
+                print(f"   Monde: ({world_x:.1f}cm, {world_y:.1f}cm)")
+                print(f"   Valeur: {self.grid[gy, gx]}")
+                return
+
+            # Mode édition normal
             # Déterminer la valeur selon le bouton
             if button == 1:  # Clic gauche - zone libre
                 new_value = 0
@@ -741,6 +818,22 @@ class GridEditor:
         finally:
             root.destroy()
 
+    def _toggle_coordinate_mode(self):
+        """Active/désactive le mode coordonnées."""
+        self.coordinate_mode = not self.coordinate_mode
+        if self.coordinate_mode:
+            self.last_clicked_cell = None
+            self.last_clicked_coords = None
+
+    def _calculate_world_coordinates(
+        self, grid_x: int, grid_y: int
+    ) -> Tuple[float, float]:
+        """Calcule les coordonnées monde (centre de la case) à partir des indices de grille."""
+        # Coordonnées du centre de la case en centimètres
+        world_x = (grid_x + 0.5) * self.edge_length
+        world_y = (grid_y + 0.5) * self.edge_length
+        return world_x, world_y
+
     def _show_help(self):
         """Affiche l'aide de l'éditeur."""
         help_text = """AIDE - ÉDITEUR DE GRILLE
@@ -763,8 +856,17 @@ BOUTONS:
 • Sauver: Sauvegarder grille actuelle
 • Reset: Vider la grille
 • Taille: Redimensionner grille
+• Coord: Mode coordonnées (affichage)
 • Aide: Afficher cette aide
 • Quitter: Fermer l'éditeur
+
+MODE COORDONNÉES:
+• Activez avec le bouton 'Coord'
+• Cliquez sur une case pour voir:
+  - Position grille (x, y)
+  - Coordonnées monde (cm)
+  - Type de cellule
+• Désactive l'édition temporairement
 
 LÉGENDE:
 • Blanc: Zone navigable (valeur 0)
