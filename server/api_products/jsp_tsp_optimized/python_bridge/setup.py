@@ -8,6 +8,17 @@ USE_HDF5 = True  # Mettre à False si HDF5 n'est pas disponible
 USE_LKH = True  # Mettre à False si LKH n'est pas disponible
 
 
+def get_python_config():
+    """Récupère les flags de compilation Python"""
+    try:
+        includes = subprocess.check_output(["python3-config", "--includes"]).decode().strip().split()
+        ldflags = subprocess.check_output(["python3-config", "--ldflags"]).decode().strip().split()
+        return includes, ldflags
+    except subprocess.CalledProcessError:
+        print("Warning: python3-config not found, using default paths")
+        return [], []
+
+
 def check_hdf5():
     try:
         subprocess.run(
@@ -17,6 +28,17 @@ def check_hdf5():
     except (subprocess.CalledProcessError, FileNotFoundError):
         print("HDF5 not found. Install with: sudo apt-get install libhdf5-dev")
         return False
+
+
+def get_hdf5_config():
+    """Récupère les flags de compilation et de liaison pour HDF5"""
+    try:
+        cflags = subprocess.check_output(["pkg-config", "--cflags", "hdf5"]).decode().strip().split()
+        libs = subprocess.check_output(["pkg-config", "--libs", "hdf5"]).decode().strip().split()
+        return cflags, libs
+    except subprocess.CalledProcessError:
+        print("Warning: pkg-config failed for HDF5")
+        return [], []
 
 
 def check_lkh():
@@ -33,8 +55,21 @@ def check_lkh():
 hdf5_available = check_hdf5() if USE_HDF5 else False
 lkh_available = check_lkh() if USE_LKH else False
 
+# Récupération de la configuration Python
+python_includes, python_ldflags = get_python_config()
+
+# Récupération de la configuration HDF5
+hdf5_cflags, hdf5_libs = get_hdf5_config() if hdf5_available else ([], [])
+
 # Configuration de compilation
 compile_args = ["-O3", "-march=native", "-ffast-math", "-DNDEBUG"]
+# Ajout des flags Python
+for flag in python_includes:
+    if flag.startswith('-I'):
+        compile_args.append(flag)
+# Ajout des flags HDF5
+compile_args.extend(hdf5_cflags)
+
 define_macros = [("NPY_NO_DEPRECATED_API", "NPY_1_7_API_VERSION")]
 
 if hdf5_available:
@@ -55,8 +90,7 @@ sources = [
     "../jps_module/src/jps_core.c",
     "../jps_module/src/jps_cache.c",
     "../jps_module/src/jps_matrix.c",
-    "../jps_module/src/jps_path.c",
-    "../tsp_module/src/tsp_solver.c",
+    "../tsp_module/src/tsp_sovler.c",
     "../tsp_module/src/lkh_interface.c",
 ]
 
@@ -70,6 +104,7 @@ jps_tsp_module = Extension(
     ],
     libraries=libraries,
     extra_compile_args=compile_args,
+    extra_link_args=[flag for flag in python_ldflags + hdf5_libs if not flag.startswith('-I')],
     define_macros=define_macros,
 )
 

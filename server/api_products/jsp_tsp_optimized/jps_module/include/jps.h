@@ -1,7 +1,7 @@
 #ifndef JPS_H
 #define JPS_H
 
-#include "../common/include/common.h"
+#include "../../common/include/common.h"
 
 #define JPS_CACHE_EXTENSION ".jps"
 #define JPS_CACHE_VERSION 3
@@ -15,6 +15,7 @@ typedef struct
 } JPSResult;
 
 // API JPS
+JPSResult *jps_result_create(uint32_t poi_count);
 JPSResult *jps_compute_all_paths(const Grid *grid, float euclidean_threshold,
                                  const char *cache_path);
 bool jps_cache_save(const JPSResult *result, const char *filename);

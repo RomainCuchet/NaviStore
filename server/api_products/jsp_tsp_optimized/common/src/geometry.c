@@ -1,4 +1,5 @@
 #include "../include/common.h"
+#include <stdlib.h>
 
 uint64_t compute_grid_hash(const Grid *grid)
 {

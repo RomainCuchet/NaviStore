@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <io.h>
 #include "../include/tsp.h"
 #ifdef _WIN32
 #include <io.h>

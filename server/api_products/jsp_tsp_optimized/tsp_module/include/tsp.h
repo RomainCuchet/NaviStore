@@ -1,7 +1,7 @@
 #ifndef TSP_H
 #define TSP_H
 
-#include "../common/include/common.h"
+#include "../../common/include/common.h"
 
 typedef struct
 {
