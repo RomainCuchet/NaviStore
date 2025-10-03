@@ -175,14 +175,15 @@ class GridEditor:
         return hasher.hexdigest()
 
     def _get_grid_pos(self, mouse_pos: Tuple[int, int]) -> Optional[Tuple[int, int]]:
-        """Convertit position souris en coordonnées grille."""
+        """Convertit position souris en coordonnées grille (x=row, y=col)."""
         mx, my = mouse_pos
 
-        gx = (mx - self.offset_x) // self.cell_size
-        gy = (my - self.offset_y) // self.cell_size
+        # mx correspond aux colonnes (y), my correspond aux lignes (x)
+        col = (mx - self.offset_x) // self.cell_size  # y coordinate
+        row = (my - self.offset_y) // self.cell_size  # x coordinate
 
-        if 0 <= gx < self.grid_width and 0 <= gy < self.grid_height:
-            return int(gx), int(gy)
+        if 0 <= col < self.grid_width and 0 <= row < self.grid_height:
+            return int(row), int(col)  # Retourne (x=row, y=col)
         return None
 
     def _draw_grid(self):
@@ -368,9 +369,9 @@ class GridEditor:
             ]
 
             if self.last_clicked_cell:
-                gx, gy = self.last_clicked_cell
+                x, y = self.last_clicked_cell  # x=row, y=col
                 world_x, world_y = self.last_clicked_coords
-                cell_value = self.grid[gy, gx]
+                cell_value = self.grid[x, y]
 
                 value_names = {0: "libre", 1: "POI", -1: "obstacle"}
                 value_name = value_names.get(cell_value, "inconnu")
@@ -379,7 +380,7 @@ class GridEditor:
                     [
                         "",
                         f"Dernière case cliquée:",
-                        f"• Grille: ({gx}, {gy})",
+                        f"• Grille: ({x}, {y})",
                         f"• Monde: ({world_x:.1f}, {world_y:.1f}) cm",
                         f"• Type: {value_name} ({cell_value})",
                     ]
@@ -458,19 +459,19 @@ class GridEditor:
         # Obtenir position dans la grille
         grid_pos = self._get_grid_pos(pos)
         if grid_pos:
-            gx, gy = grid_pos
+            x, y = grid_pos  # x=row, y=col
 
             # Mode coordonnées : afficher les informations
             if self.coordinate_mode:
-                world_x, world_y = self._calculate_world_coordinates(gx, gy)
-                self.last_clicked_cell = (gx, gy)
+                world_x, world_y = self._calculate_world_coordinates(x, y)
+                self.last_clicked_cell = (x, y)
                 self.last_clicked_coords = (world_x, world_y)
 
                 # Afficher dans la console
                 print(f"🎯 Coordonnées de la case:")
-                print(f"   Grille: ({gx}, {gy})")
+                print(f"   Grille: (x={x}, y={y}) = (row={x}, col={y})")
                 print(f"   Monde: ({world_x:.1f}cm, {world_y:.1f}cm)")
-                print(f"   Valeur: {self.grid[gy, gx]}")
+                print(f"   Valeur: {self.grid[x, y]}")
                 return
 
             # Mode édition normal
@@ -485,8 +486,8 @@ class GridEditor:
                 return
 
             # Appliquer modification
-            if self.grid[gy, gx] != new_value:
-                self.grid[gy, gx] = new_value
+            if self.grid[x, y] != new_value:  # grid[row, col]
+                self.grid[x, y] = new_value
                 self.has_changes = True
                 self._update_stats()
 
@@ -495,11 +496,11 @@ class GridEditor:
         if self.mouse_pressed:
             grid_pos = self._get_grid_pos(pos)
             if grid_pos:
-                gx, gy = grid_pos
+                x, y = grid_pos  # x=row, y=col selon nouvelle convention
 
                 # Utiliser l'outil actuel
-                if self.grid[gy, gx] != self.current_tool:
-                    self.grid[gy, gx] = self.current_tool
+                if self.grid[x, y] != self.current_tool:
+                    self.grid[x, y] = self.current_tool
                     self.has_changes = True
                     self._update_stats()
 
@@ -828,8 +829,15 @@ class GridEditor:
     def _calculate_world_coordinates(
         self, grid_x: int, grid_y: int
     ) -> Tuple[float, float]:
-        """Calcule les coordonnées monde (centre de la case) à partir des indices de grille."""
+        """Calcule les coordonnées monde (centre de la case) à partir des indices de grille.
+        Args:
+            grid_x: row (ligne)
+            grid_y: col (colonne)
+        Returns:
+            (world_x, world_y) où world_x correspond à grid_x et world_y à grid_y
+        """
         # Coordonnées du centre de la case en centimètres
+        # grid_x (row) -> world_x, grid_y (col) -> world_y
         world_x = (grid_x + 0.5) * self.edge_length
         world_y = (grid_y + 0.5) * self.edge_length
         return world_x, world_y

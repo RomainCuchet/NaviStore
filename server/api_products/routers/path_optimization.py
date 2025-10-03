@@ -24,6 +24,11 @@ from api_products.path_optimization import (
     save_hash_to_json,
     load_hash_from_json,
 )
+from api_products.path_optimization.serialization_utils import (
+    clean_optimization_response,
+    clean_poi_summary,
+    convert_numpy_types,
+)
 from api_products.shopping_list_optimizer import (
     ShoppingListOptimizer,
     ShoppingListOptimizationRequest,
@@ -241,18 +246,24 @@ async def optimize_shopping_path(
             f"time={computation_time:.2f}s"
         )
 
-        return PathOptimizationResponse(
-            success=True,
-            total_distance=total_distance,
-            visiting_order=visiting_order,
-            complete_path=complete_path,
-            poi_count=len(poi_coords_real),
-            computation_time=computation_time,
-            cache_used=cache_used,
-            layout_hash=layout_hash,
-            optimization_stats=optimization_stats,
-            path_summary=path_summary,
-        )
+        # Create response with cleaned data (no NumPy types)
+        response_data = {
+            "success": True,
+            "total_distance": float(total_distance),
+            "visiting_order": visiting_order,
+            "complete_path": complete_path,
+            "poi_count": len(poi_coords_real),
+            "computation_time": float(computation_time),
+            "cache_used": cache_used,
+            "layout_hash": layout_hash,
+            "optimization_stats": optimization_stats,
+            "path_summary": path_summary,
+        }
+
+        # Clean all NumPy types from response
+        cleaned_response = clean_optimization_response(response_data)
+
+        return PathOptimizationResponse(**cleaned_response)
 
     except HTTPException:
         raise
@@ -381,7 +392,10 @@ async def validate_poi_placement(
             f"POIs={len(poi_coords_real)}, valid={poi_summary['valid_placement']}"
         )
 
-        return {"success": True, "poi_summary": poi_summary}
+        # Clean NumPy types from POI summary
+        cleaned_summary = clean_poi_summary(poi_summary)
+
+        return {"success": True, "poi_summary": cleaned_summary}
 
     except HTTPException:
         raise

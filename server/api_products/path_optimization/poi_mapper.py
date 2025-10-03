@@ -49,6 +49,7 @@ class POIMapper:
     def _validate_grid_bounds(self, grid_coords: np.ndarray) -> None:
         """
         Validate that grid coordinates are within bounds.
+        Note: x=row (vertical), y=col (horizontal), origin at top-left
 
         Args:
             grid_coords: Array of grid coordinates to validate
@@ -58,18 +59,19 @@ class POIMapper:
         """
         height, width = self.original_layout.shape
 
-        # Check bounds
+        # Check bounds - x=row, y=col
         x_coords, y_coords = grid_coords[:, 0], grid_coords[:, 1]
 
-        if np.any(x_coords < 0) or np.any(x_coords >= width):
-            raise ValueError(f"POI x-coordinates out of bounds [0, {width-1}]")
+        if np.any(x_coords < 0) or np.any(x_coords >= height):
+            raise ValueError(f"POI x-coordinates (rows) out of bounds [0, {height-1}]")
 
-        if np.any(y_coords < 0) or np.any(y_coords >= height):
-            raise ValueError(f"POI y-coordinates out of bounds [0, {height-1}]")
+        if np.any(y_coords < 0) or np.any(y_coords >= width):
+            raise ValueError(f"POI y-coordinates (cols) out of bounds [0, {width-1}]")
 
     def _check_obstacle_conflicts(self, grid_coords: np.ndarray) -> None:
         """
         Check if any POI coordinates conflict with obstacles.
+        Note: x=row (vertical), y=col (horizontal), origin at top-left
 
         Args:
             grid_coords: Array of grid coordinates to check
@@ -78,11 +80,11 @@ class POIMapper:
             ValueError: If any POI conflicts with an obstacle
         """
         for i, (x, y) in enumerate(grid_coords):
-            if self.original_layout[y, x] == -1:
+            if self.original_layout[x, y] == -1:  # matrix[row, col]
                 real_coord = self.real_world_coords[i]
                 raise ValueError(
                     f"POI at real-world coordinates {real_coord} "
-                    f"(grid: {x}, {y}) conflicts with an obstacle"
+                    f"(grid: row={x}, col={y}) conflicts with an obstacle"
                 )
 
     def transform_coordinates(self) -> np.ndarray:
@@ -141,7 +143,7 @@ class POIMapper:
 
         # Mark POIs in the grid
         for x, y in grid_coords:
-            updated_grid[y, x] = 1  # Mark as point of interest
+            updated_grid[x, y] = 1  # Mark as point of interest (x=row, y=col)
 
         # Compute grid threshold
         distance_threshold_grid = self.compute_distance_threshold_grid()

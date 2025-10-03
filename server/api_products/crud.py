@@ -2,30 +2,175 @@
 
 import json
 import time
-from elasticsearch import Elasticsearch, helpers
+import logging
+from typing import Optional
+from elasticsearch import Elasticsearch, helpers, ConnectionError, ConnectionTimeout
 from api_products.config import ES_HOST, ES_INDEX
 
-max_retries = 10
-wait_time = 5
+# Configuration du logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# TODO: replace with a proper healthcheck instead of a fixed sleep
-time.sleep(240)  #
 
-# Try connecting to Elasticsearch with retries
-for attempt in range(max_retries):
-    try:
-        es = Elasticsearch(ES_HOST)
-        if es.ping():
-            print("✅ Elasticsearch is available")
-            break
-    except Exception:
-        if attempt < max_retries - 1:
-            print(
-                f"⏳ Attempt {attempt+1}/{max_retries} failed, retrying in {wait_time}s"
+def wait_for_elasticsearch(
+    host: str = ES_HOST,
+    max_wait_time: int = 300,  # 5 minutes max
+    initial_wait: float = 1.0,  # Commencer par 1 seconde
+    max_interval: float = 30.0,  # Intervalle max de 30 secondes
+    backoff_factor: float = 1.5,  # Facteur d'augmentation
+) -> Elasticsearch:
+    """
+    Attend qu'Elasticsearch soit prêt avec une stratégie de retry optimisée.
+
+    Args:
+        host: Host Elasticsearch
+        max_wait_time: Temps d'attente maximum en secondes
+        initial_wait: Délai initial entre les tentatives
+        max_interval: Délai maximum entre les tentatives
+        backoff_factor: Facteur d'augmentation du délai
+
+    Returns:
+        Instance Elasticsearch connectée
+
+    Raises:
+        ConnectionError: Si Elasticsearch n'est pas disponible après max_wait_time
+    """
+    start_time = time.time()
+    wait_interval = initial_wait
+    attempt = 1
+
+    logger.info(f"🔍 Attente d'Elasticsearch sur {host}...")
+
+    while time.time() - start_time < max_wait_time:
+        try:
+            # Créer le client Elasticsearch avec la bonne configuration
+            es = Elasticsearch(
+                hosts=[host], request_timeout=5, max_retries=1, retry_on_timeout=True
             )
-            time.sleep(wait_time)
-        else:
-            raise
+
+            # Test de ping simple
+            if es.ping():
+                logger.info(f"🏥 Ping OK - Vérification de la santé du cluster...")
+
+                # Vérification de la santé du cluster
+                try:
+                    health = es.cluster.health(timeout="10s")
+                    status = health.get("status", "unknown")
+
+                    if status in ["green", "yellow"]:
+                        elapsed = time.time() - start_time
+                        logger.info(
+                            f"✅ Elasticsearch prêt ! (statut: {status}, "
+                            f"temps d'attente: {elapsed:.1f}s, tentatives: {attempt})"
+                        )
+                        return es
+                    else:
+                        logger.warning(f"⚠️ Cluster en statut '{status}', attente...")
+
+                except Exception as health_error:
+                    logger.warning(f"⚠️ Erreur santé cluster: {health_error}")
+
+            else:
+                logger.debug(f"🔍 Ping échoué (tentative {attempt})")
+
+        except (ConnectionError, ConnectionTimeout) as e:
+            logger.debug(
+                f"🔍 Connexion échouée (tentative {attempt}): {type(e).__name__}"
+            )
+        except Exception as e:
+            logger.warning(f"⚠️ Erreur inattendue (tentative {attempt}): {e}")
+
+        # Attendre avant la prochaine tentative
+        elapsed = time.time() - start_time
+        remaining = max_wait_time - elapsed
+
+        if remaining <= wait_interval:
+            logger.error(
+                f"❌ Timeout atteint ({max_wait_time}s) - Elasticsearch non disponible"
+            )
+            raise ConnectionError(
+                f"Elasticsearch non disponible après {max_wait_time}s d'attente"
+            )
+
+        logger.info(
+            f"⏳ Tentative {attempt} échouée, nouvelle tentative dans {wait_interval:.1f}s "
+            f"(temps écoulé: {elapsed:.1f}s/{max_wait_time}s)"
+        )
+
+        time.sleep(wait_interval)
+
+        # Augmenter l'intervalle avec backoff exponentiel
+        wait_interval = min(wait_interval * backoff_factor, max_interval)
+        attempt += 1
+
+    raise ConnectionError(f"Elasticsearch non disponible après {max_wait_time}s")
+
+
+# Initialisation avec attente optimisée
+logger.info("🚀 Initialisation de la connexion Elasticsearch...")
+es = wait_for_elasticsearch()
+
+
+def get_elasticsearch_health() -> dict:
+    """
+    Récupère l'état de santé d'Elasticsearch.
+
+    Returns:
+        Dictionnaire avec les informations de santé
+    """
+    try:
+        if not es.ping():
+            return {"status": "unreachable", "error": "Ping failed"}
+
+        health = es.cluster.health(timeout="5s")
+
+        return {
+            "status": health.get("status", "unknown"),
+            "cluster_name": health.get("cluster_name", "unknown"),
+            "number_of_nodes": health.get("number_of_nodes", 0),
+            "active_primary_shards": health.get("active_primary_shards", 0),
+            "active_shards": health.get("active_shards", 0),
+            "relocating_shards": health.get("relocating_shards", 0),
+            "initializing_shards": health.get("initializing_shards", 0),
+            "unassigned_shards": health.get("unassigned_shards", 0),
+            "delayed_unassigned_shards": health.get("delayed_unassigned_shards", 0),
+            "pending_tasks": health.get("number_of_pending_tasks", 0),
+            "in_flight_fetch": health.get("number_of_in_flight_fetch", 0),
+            "task_max_waiting_in_queue_millis": health.get(
+                "task_max_waiting_in_queue_millis", 0
+            ),
+            "active_shards_percent_as_number": health.get(
+                "active_shards_percent_as_number", 0.0
+            ),
+        }
+
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
+def ensure_elasticsearch_connection() -> bool:
+    """
+    S'assure que la connexion Elasticsearch est active.
+    Reconnecte si nécessaire.
+
+    Returns:
+        True si la connexion est active, False sinon
+    """
+    global es
+
+    try:
+        if es.ping():
+            return True
+
+        logger.warning("🔄 Connexion Elasticsearch perdue, tentative de reconnexion...")
+        es = wait_for_elasticsearch(
+            max_wait_time=60
+        )  # Attente réduite pour reconnexion
+        return True
+
+    except Exception as e:
+        logger.error(f"❌ Impossible de rétablir la connexion Elasticsearch: {e}")
+        return False
 
 
 def create_index_if_missing():

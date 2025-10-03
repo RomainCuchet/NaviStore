@@ -1,0 +1,8 @@
+server/api_products/tools/
+server/api_products/navistore_server-venv/
+server/assets/
+
+
+__pycache__/
+*.pyc
+*.pyo

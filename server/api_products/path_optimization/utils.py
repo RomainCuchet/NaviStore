@@ -99,17 +99,20 @@ def real_world_to_grid_coords(
 ) -> np.ndarray:
     """
     Convert real-world coordinates to grid indices.
+    Note: Real-world (x, y) maps to grid (x=row, y=col) with origin at top-left
+    Assumes real-world coordinates represent cell centers.
 
     Args:
-        real_coords: Array of shape (N, 2) with real-world coordinates
+        real_coords: Array of shape (N, 2) with real-world coordinates (x, y)
         edge_length: Size of one grid cell in centimeters
 
     Returns:
-        Array of shape (N, 2) with grid indices (x, y)
+        Array of shape (N, 2) with grid indices (x=row, y=col)
     """
-    # Convert to grid coordinates (origin at bottom-left)
-    grid_coords = np.round(real_coords / edge_length).astype(int)
-    return grid_coords
+    # Convert to grid coordinates - x becomes row, y becomes col
+    # Real-world coords are cell centers, so direct division and floor gives correct index
+    grid_coords = np.floor(real_coords / edge_length).astype(int)
+    return grid_coords  # Already in (x=row, y=col) format
 
 
 def grid_to_real_world_coords(
@@ -117,16 +120,19 @@ def grid_to_real_world_coords(
 ) -> np.ndarray:
     """
     Convert grid indices to real-world coordinates.
+    Note: Grid (x=row, y=col) maps to real-world (x, y) with origin at top-left
+    Returns coordinates of cell centers.
 
     Args:
-        grid_coords: Array of shape (N, 2) with grid indices
+        grid_coords: Array of shape (N, 2) with grid indices (x=row, y=col)
         edge_length: Size of one grid cell in centimeters
 
     Returns:
-        Array of shape (N, 2) with real-world coordinates
+        Array of shape (N, 2) with real-world coordinates (x, y) at cell centers
     """
-    real_coords = grid_coords * edge_length
-    return real_coords
+    # Convert to cell centers by adding 0.5 to grid indices
+    real_coords = (grid_coords + 0.5) * edge_length
+    return real_coords  # x=(row+0.5)*edge_length, y=(col+0.5)*edge_length
 
 
 def manhattan_distance(p1: Tuple[int, int], p2: Tuple[int, int]) -> int:
