@@ -15,9 +15,8 @@ import json
 
 from api_products.auth import verify_api_key
 from api_products.path_optimization import (
-    StoreLayoutCacheManager,
+    StoreLayoutManager,
     POIMapper,
-    OptimizedJPS,
     PathfindingSolver,
     PathfindingSolverFactory,
     TSPSolver,
@@ -30,11 +29,6 @@ from api_products.path_optimization.serialization_utils import (
     clean_optimization_response,
     clean_poi_summary,
     convert_numpy_types,
-)
-from api_products.shopping_list_optimizer import (
-    ShoppingListOptimizer,
-    ShoppingListOptimizationRequest,
-    OptimizedShoppingRoute,
 )
 
 router = APIRouter(prefix="/path_optimization", tags=["Path Optimization"])
@@ -87,7 +81,6 @@ class PathOptimizationResponse(BaseModel):
     complete_path: List[Tuple[int, int]]
     poi_count: int
     computation_time: float
-    cache_used: bool
     layout_hash: str
     optimization_stats: dict
     path_summary: dict
@@ -126,7 +119,7 @@ async def upload_store_layout(
             layout, edge_length = load_layout_from_h5(temp_path)
 
             # Move to permanent location with hash-based name
-            cache_manager = StoreLayoutCacheManager(layout)
+            cache_manager = StoreLayoutManager(layout)
             layout_hash = cache_manager.get_current_hash()
 
             permanent_path = os.path.join("assets/layouts", f"{layout_hash}.h5")
@@ -208,8 +201,8 @@ async def optimize_shopping_path(
             )
 
         # Step 1: Cache management
-        cache_manager = StoreLayoutCacheManager(
-            layout, current_hash, cache_dir="assets/cache"
+        layout_manager = StoreLayoutManager(
+            layout, current_hash, svg_assets_dir="assets/svg"
         )
 
         # Step 2: POI mapping
@@ -219,51 +212,39 @@ async def optimize_shopping_path(
         grid_with_poi, distance_threshold_grid = poi_mapper.generate_grid()
         poi_grid_coords = poi_mapper.get_poi_grid_coordinates()
 
-        # Step 3: Update cache if needed
-        layout_hash, jps_cache = cache_manager.update_cache_if_needed(grid_with_poi)
-        cache_used = layout_hash == current_hash
+        # Step 3: Update svg assets if needed
+        layout_hash, jps_cache = layout_manager.update_svg_if_needed()
+        generated_layout_svg = layout_hash == current_hash
 
-        # Step 4: Pathfinding computation
-        # Choose solver based on algorithm parameter
-        if request.pathfinding_algorithm == "jps":
-            # Use original JPS solver
-            solver = OptimizedJPS(
-                grid_with_poi, jps_cache, distance_threshold_grid, poi_grid_coords
+        try:
+            solver = PathfindingSolverFactory.create_solver(
+                grid_with_poi=grid_with_poi,
+                jps_cache=jps_cache,  # Ignored but required for interface compatibility
+                distance_threshold_grid=distance_threshold_grid,
+                poi_coords=poi_grid_coords,
+                algorithm=request.pathfinding_algorithm,
+                diagonal_movement=request.diagonal_movement,
             )
-            logger.info("Using JPS pathfinding algorithm")
-        else:
-            # Use pathfinding library solver
-            try:
-                solver = PathfindingSolverFactory.create_solver(
-                    grid_with_poi=grid_with_poi,
-                    jps_cache=jps_cache,  # Ignored but required for interface compatibility
-                    distance_threshold_grid=distance_threshold_grid,
-                    poi_coords=poi_grid_coords,
-                    algorithm=request.pathfinding_algorithm,
-                    diagonal_movement=request.diagonal_movement,
-                )
-                logger.info(
-                    f"Using {request.pathfinding_algorithm.upper()} pathfinding algorithm"
-                )
-            except ImportError:
-                # Fallback to JPS if pathfinding library not available
-                logger.warning("pathfinding library not available, falling back to JPS")
-                solver = OptimizedJPS(
-                    grid_with_poi, jps_cache, distance_threshold_grid, poi_grid_coords
-                )
-            except ValueError as e:
-                # Invalid algorithm, fallback to A*
-                logger.warning(
-                    f"Invalid algorithm {request.pathfinding_algorithm}, falling back to A*"
-                )
-                solver = PathfindingSolverFactory.create_solver(
-                    grid_with_poi=grid_with_poi,
-                    jps_cache=jps_cache,
-                    distance_threshold_grid=distance_threshold_grid,
-                    poi_coords=poi_grid_coords,
-                    algorithm="astar",
-                    diagonal_movement=request.diagonal_movement,
-                )
+            logger.info(
+                f"Using {request.pathfinding_algorithm.upper()} pathfinding algorithm"
+            )
+        except ImportError:
+            # Fallback to JPS if pathfinding library not available
+            logger.warning("pathfinding library not available")
+
+        except ValueError as e:
+            # Invalid algorithm, fallback to A*
+            logger.warning(
+                f"Invalid algorithm {request.pathfinding_algorithm}, falling back to A*"
+            )
+            solver = PathfindingSolverFactory.create_solver(
+                grid_with_poi=grid_with_poi,
+                jps_cache=jps_cache,
+                distance_threshold_grid=distance_threshold_grid,
+                poi_coords=poi_grid_coords,
+                algorithm="astar",
+                diagonal_movement=request.diagonal_movement,
+            )
 
         distance_matrix, path_matrix = solver.compute_all_paths()
 
@@ -301,7 +282,7 @@ async def optimize_shopping_path(
             "complete_path": complete_path,
             "poi_count": len(poi_coords_real),
             "computation_time": float(computation_time),
-            "cache_used": cache_used,
+            "generated_layout_svg": generated_layout_svg,
             "layout_hash": layout_hash,
             "optimization_stats": optimization_stats,
             "path_summary": path_summary,
@@ -359,52 +340,6 @@ async def get_layout_status(user_info: dict = Depends(verify_api_key)):
         raise HTTPException(status_code=500, detail=f"Status check failed: {str(e)}")
 
 
-@router.delete("/clear_cache")
-async def clear_path_cache(user_info: dict = Depends(verify_api_key)):
-    """
-    Clear all path optimization cache files.
-
-    Requires write permissions.
-    """
-    from api_products.auth import require_write_rights
-
-    require_write_rights(user_info)
-
-    try:
-        cache_dir = "assets/cache"
-        layouts_dir = "assets/layouts"
-
-        files_removed = 0
-
-        # Remove cache files
-        for filename in os.listdir(cache_dir):
-            if filename.endswith(".pkl") or filename.endswith(".json"):
-                file_path = os.path.join(cache_dir, filename)
-                os.remove(file_path)
-                files_removed += 1
-
-        # Remove layout files
-        for filename in os.listdir(layouts_dir):
-            if filename.endswith(".h5"):
-                file_path = os.path.join(layouts_dir, filename)
-                os.remove(file_path)
-                files_removed += 1
-
-        logger.info(
-            f"Cache cleared by user={user_info['user']}, files_removed={files_removed}"
-        )
-
-        return {
-            "success": True,
-            "files_removed": files_removed,
-            "message": "Cache cleared successfully",
-        }
-
-    except Exception as e:
-        logger.error(f"Cache clear error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Cache clear failed: {str(e)}")
-
-
 @router.post("/validate_poi_placement")
 async def validate_poi_placement(
     request: PathOptimizationRequest, user_info: dict = Depends(verify_api_key)
@@ -451,47 +386,18 @@ async def validate_poi_placement(
         raise HTTPException(status_code=500, detail=f"Validation failed: {str(e)}")
 
 
-@router.post("/optimize_shopping_list", response_model=OptimizedShoppingRoute)
-async def optimize_shopping_list(
-    request: ShoppingListOptimizationRequest, user_info: dict = Depends(verify_api_key)
-):
-    """
-    Optimize shopping route for a list of products with their locations.
-
-    This endpoint integrates with the products database to provide complete
-    product information along with the optimal collection route.
-    """
-    try:
-        optimizer = ShoppingListOptimizer()
-        result = optimizer.optimize_shopping_route(request)
-
-        logger.info(
-            f"Shopping list optimized for user={user_info['user']}, "
-            f"items={result.total_items}, distance={result.total_distance:.2f}"
-        )
-
-        return result
-
-    except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e))
-    except Exception as e:
-        logger.error(f"Shopping list optimization error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Optimization failed: {str(e)}")
-
-
 @router.get("/pathfinding_algorithms")
 async def get_pathfinding_algorithms(user_info: dict = Depends(verify_api_key)):
     """
     Get list of available pathfinding algorithms and their recommendations.
     """
     try:
-        algorithms = ["jps"] + PathfindingSolverFactory.get_available_algorithms()
+        algorithms = PathfindingSolverFactory.get_available_algorithms()
 
         return {
             "success": True,
             "algorithms": algorithms,
             "descriptions": {
-                "jps": "Jump Point Search - Optimized for grid-based pathfinding with diagonal movements",
                 "astar": "A* Algorithm - Balanced performance and optimality, good general purpose",
                 "dijkstra": "Dijkstra's Algorithm - Guaranteed shortest path, slower but very reliable",
                 "best_first": "Best First Search - Faster for large grids, may not find optimal path",
@@ -511,55 +417,3 @@ async def get_pathfinding_algorithms(user_info: dict = Depends(verify_api_key)):
             "algorithms": ["jps"],  # Fallback to JPS only
             "error": str(e),
         }
-
-
-@router.post("/estimate_collection_time")
-async def estimate_collection_time(
-    route_request: OptimizedShoppingRoute,
-    walking_speed_cm_per_sec: float = 100.0,
-    collection_time_per_item_sec: float = 30.0,
-    user_info: dict = Depends(verify_api_key),
-):
-    """
-    Estimate total time required to complete an optimized shopping route.
-
-    Args:
-        route_request: Previously optimized shopping route
-        walking_speed_cm_per_sec: Walking speed in cm/second (default: 100 cm/s = 3.6 km/h)
-        collection_time_per_item_sec: Time to collect each item in seconds (default: 30s)
-    """
-    try:
-        optimizer = ShoppingListOptimizer()
-        time_estimate = optimizer.estimate_collection_time(
-            route_request, walking_speed_cm_per_sec, collection_time_per_item_sec
-        )
-
-        return {"success": True, "time_estimate": time_estimate}
-
-    except Exception as e:
-        logger.error(f"Time estimation error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Time estimation failed: {str(e)}")
-
-
-@router.post("/get_route_directions")
-async def get_route_directions(
-    route_request: OptimizedShoppingRoute, user_info: dict = Depends(verify_api_key)
-):
-    """
-    Get step-by-step directions for an optimized shopping route.
-    """
-    try:
-        optimizer = ShoppingListOptimizer()
-        directions = optimizer.get_route_directions(route_request)
-
-        return {
-            "success": True,
-            "directions": directions,
-            "total_steps": len(directions),
-        }
-
-    except Exception as e:
-        logger.error(f"Directions generation error: {str(e)}")
-        raise HTTPException(
-            status_code=500, detail=f"Directions generation failed: {str(e)}"
-        )

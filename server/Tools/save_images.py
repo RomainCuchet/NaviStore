@@ -4,8 +4,8 @@ import requests
 from urllib.parse import urlparse, parse_qs
 
 # Chemins
-JSON_FILE = "api_products/assets/json/products.json"
-IMAGES_DIR = os.path.join("assets", "products_images")
+JSON_FILE = "../api_products/assets/json/products.json"
+IMAGES_DIR = os.path.join("..", "assets", "products_images")
 
 os.makedirs(IMAGES_DIR, exist_ok=True)
 

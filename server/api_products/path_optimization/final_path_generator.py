@@ -28,7 +28,7 @@ class FinalPathGenerator:
         Initialize the final path generator.
 
         Args:
-            path_matrix: Matrix of paths between POIs from OptimizedJPS
+            path_matrix: Matrix of paths between POIs from PathfindingSolver
             visiting_order: Optimal visiting order from TSPSolver
             poi_coords: Array of POI coordinates in grid space
         """

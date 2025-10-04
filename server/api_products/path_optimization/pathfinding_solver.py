@@ -29,8 +29,7 @@ logger = logging.getLogger(__name__)
 class PathfindingSolver:
     """
     Solver de pathfinding utilisant la librairie pathfinding.
-    
-    Compatible avec l'interface OptimizedJPS existante.
+
     Support des seuils de distance et optimisations de performance.
     """
 
@@ -84,7 +83,8 @@ class PathfindingSolver:
     def _create_finder(self):
         """Crée le finder pathfinding selon l'algorithme choisi."""
         diagonal_mode = (
-            DiagonalMovement.always if self.diagonal_movement 
+            DiagonalMovement.always
+            if self.diagonal_movement
             else DiagonalMovement.never
         )
 
@@ -97,7 +97,9 @@ class PathfindingSolver:
         else:
             raise ValueError(f"Algorithme non supporté: {self.algorithm}")
 
-        logger.debug(f"Created {self.algorithm} finder with diagonal={self.diagonal_movement}")
+        logger.debug(
+            f"Created {self.algorithm} finder with diagonal={self.diagonal_movement}"
+        )
 
     def find_path(
         self, start: Tuple[int, int], goal: Tuple[int, int]
@@ -114,43 +116,43 @@ class PathfindingSolver:
         """
         try:
             start_time = time.time()
-            
+
             # Créer une nouvelle grille pour chaque recherche (la méthode clone() n'existe pas)
             # Recréer la grille avec les mêmes données
             walkable_matrix = (self.grid_array >= 0).astype(int)
             grid = Grid(matrix=walkable_matrix)
-            
+
             # Obtenir les nœuds start et goal
             # CORRECTION: pathfinding lib utilise node(x, y) où x=col, y=row
             # Nos coordonnées sont (row, col), donc il faut inverser
             start_node = grid.node(start[1], start[0])  # (col, row)
-            goal_node = grid.node(goal[1], goal[0])    # (col, row)
-            
+            goal_node = grid.node(goal[1], goal[0])  # (col, row)
+
             # Vérifier que les nœuds sont walkable
             if not start_node.walkable or not goal_node.walkable:
                 logger.debug(f"Start {start} ou goal {goal} non walkable")
                 return None
-            
+
             # Recherche de chemin
             path, runs = self.finder.find_path(start_node, goal_node, grid)
-            
+
             computation_time = time.time() - start_time
             self.stats["total_computation_time"] += computation_time
-            
+
             if path:
                 # Convertir en liste de tuples (row, col)
                 # CORRECTION: node.x=col, node.y=row, donc il faut inverser
                 path_coords = [(node.y, node.x) for node in path]  # (row, col)
                 self.stats["paths_computed"] += 1
-                
+
                 # Mettre à jour moyenne longueur de chemin
                 total_paths = self.stats["paths_computed"]
                 current_avg = self.stats["average_path_length"]
                 new_length = len(path_coords)
                 self.stats["average_path_length"] = (
-                    (current_avg * (total_paths - 1) + new_length) / total_paths
-                )
-                
+                    current_avg * (total_paths - 1) + new_length
+                ) / total_paths
+
                 logger.debug(
                     f"Path found: {start} -> {goal}, length={len(path_coords)}, "
                     f"time={computation_time:.4f}s"
@@ -160,7 +162,7 @@ class PathfindingSolver:
                 self.stats["paths_failed"] += 1
                 logger.debug(f"No path found: {start} -> {goal}")
                 return None
-                
+
         except Exception as e:
             logger.error(f"Erreur lors du pathfinding {start} -> {goal}: {e}")
             self.stats["paths_failed"] += 1
@@ -261,10 +263,6 @@ class PathfindingSolver:
             "average_path_length": f"{self.stats['average_path_length']:.2f}",
             "total_computation_time": f"{self.stats['total_computation_time']:.3f}s",
             "total_algorithm_time": f"{self.stats.get('total_algorithm_time', 0):.3f}s",
-            # Compatibilité avec JPS (toujours 0)
-            "cache_hits": 0,
-            "cache_misses": 0,
-            "cache_hit_rate": "0.0%",
         }
 
     def get_pathfinding_info(self) -> Dict:
