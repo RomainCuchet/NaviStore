@@ -20,11 +20,25 @@ import numpy as np
 import h5py
 import sys
 import os
-from typing import Tuple, Optional
+from typing import Tuple, Optional, List
 import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog
 import json
 import xxhash
+import time
+
+# Imports pour le pathfinding
+try:
+    sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
+    from api_products.path_optimization.pathfinding_solver import (
+        PathfindingSolver,
+        PathfindingSolverFactory,
+    )
+
+    PATHFINDING_AVAILABLE = True
+except ImportError as e:
+    PATHFINDING_AVAILABLE = False
+    print(f"⚠️ Pathfinding non disponible: {e}")
 
 # Configuration des couleurs
 COLORS = {
@@ -37,6 +51,11 @@ COLORS = {
     "text": (0, 0, 0),  # Noir - texte
     "button": (180, 180, 180),  # Gris - boutons
     "button_hover": (160, 160, 160),  # Gris foncé - boutons survolés
+    # Couleurs pour le pathfinding
+    "path_start": (255, 0, 0),  # Rouge - point de départ
+    "path_goal": (0, 0, 255),  # Bleu - point d'arrivée
+    "path_line": (255, 165, 0),  # Orange - chemin
+    "path_bg": (255, 255, 200),  # Jaune clair - arrière-plan chemin
 }
 
 # Configuration par défaut
@@ -105,6 +124,15 @@ class GridEditor:
         self.last_clicked_cell = None
         self.last_clicked_coords = None
 
+        # Mode pathfinding
+        self.pathfinding_mode = False
+        self.pathfinding_algorithm = "astar"
+        self.path_start = None
+        self.path_goal = None
+        self.computed_path = None
+        self.path_stats = None
+        self.pathfinding_step = 0  # 0=choisir start, 1=choisir goal, 2=chemin calculé
+
         # Boutons de l'interface
         self.buttons = self._create_buttons()
 
@@ -133,8 +161,9 @@ class GridEditor:
             ("Reset", self._reset_grid, 350),
             ("Taille", self._resize_grid, 450),
             ("Coord", self._toggle_coordinate_mode, 550),
-            ("Aide", self._show_help, 650),
-            ("Quitter", self._quit_editor, 750),
+            ("Path", self._toggle_pathfinding_mode, 650),
+            ("Aide", self._show_help, 750),
+            ("Quitter", self._quit_editor, 850),
         ]
 
         for text, callback, x_pos in button_configs:
@@ -218,6 +247,71 @@ class GridEditor:
 
                 pygame.draw.rect(self.screen, color, cell_rect)
                 pygame.draw.rect(self.screen, COLORS["grid_line"], cell_rect, 1)
+
+        # Dessiner les éléments de pathfinding si actifs
+        if self.pathfinding_mode:
+            self._draw_pathfinding_elements()
+
+    def _draw_pathfinding_elements(self):
+        """Dessine les éléments du pathfinding (start, goal, chemin)."""
+        # Dessiner le chemin en premier (sous les points)
+        if self.computed_path and len(self.computed_path) > 1:
+            # Convertir le chemin en coordonnées écran
+            path_points = []
+            for px, py in self.computed_path:
+                screen_x = self.offset_x + py * self.cell_size + self.cell_size // 2
+                screen_y = self.offset_y + px * self.cell_size + self.cell_size // 2
+                path_points.append((screen_x, screen_y))
+
+            # Dessiner les lignes du chemin
+            if len(path_points) > 1:
+                pygame.draw.lines(
+                    self.screen, COLORS["path_line"], False, path_points, 3
+                )
+
+            # Dessiner des points sur le chemin
+            for point in path_points[1:-1]:  # Exclure start et goal
+                pygame.draw.circle(self.screen, COLORS["path_line"], point, 2)
+
+        # Dessiner le point de départ
+        if self.path_start:
+            start_x, start_y = self.path_start  # x=row, y=col
+            start_rect = pygame.Rect(
+                self.offset_x + start_y * self.cell_size + 2,
+                self.offset_y + start_x * self.cell_size + 2,
+                self.cell_size - 4,
+                self.cell_size - 4,
+            )
+            pygame.draw.rect(self.screen, COLORS["path_start"], start_rect)
+            pygame.draw.rect(self.screen, (128, 0, 0), start_rect, 2)
+
+            # Label "S" pour Start
+            if self.cell_size >= 20:
+                font_size = min(self.cell_size - 8, 24)
+                font = pygame.font.Font(None, font_size)
+                text = font.render("S", True, (255, 255, 255))
+                text_rect = text.get_rect(center=start_rect.center)
+                self.screen.blit(text, text_rect)
+
+        # Dessiner le point d'arrivée
+        if self.path_goal:
+            goal_x, goal_y = self.path_goal  # x=row, y=col
+            goal_rect = pygame.Rect(
+                self.offset_x + goal_y * self.cell_size + 2,
+                self.offset_y + goal_x * self.cell_size + 2,
+                self.cell_size - 4,
+                self.cell_size - 4,
+            )
+            pygame.draw.rect(self.screen, COLORS["path_goal"], goal_rect)
+            pygame.draw.rect(self.screen, (0, 0, 128), goal_rect, 2)
+
+            # Label "G" pour Goal
+            if self.cell_size >= 20:
+                font_size = min(self.cell_size - 8, 24)
+                font = pygame.font.Font(None, font_size)
+                text = font.render("G", True, (255, 255, 255))
+                text_rect = text.get_rect(center=goal_rect.center)
+                self.screen.blit(text, text_rect)
 
     def _draw_ui(self):
         """Dessine l'interface utilisateur."""
@@ -397,6 +491,113 @@ class GridEditor:
             self.screen.blit(text_surface, (info_rect.x + 15, info_rect.y + y_offset))
             y_offset += line_spacing
 
+        y_offset += 15
+
+        # Section Mode Pathfinding
+        if PATHFINDING_AVAILABLE:
+            path_title_color = (
+                (200, 100, 0) if self.pathfinding_mode else COLORS["text"]
+            )
+            path_title = (
+                "🎯 Mode Pathfinding" if self.pathfinding_mode else "Mode Pathfinding"
+            )
+            self._draw_section_title(
+                path_title, info_rect.x + 10, info_rect.y + y_offset, path_title_color
+            )
+            y_offset += section_spacing
+
+            if self.pathfinding_mode:
+                path_info = [
+                    f"🟢 ACTIF - Algorithme: {self.pathfinding_algorithm.upper()}",
+                ]
+
+                if self.pathfinding_step == 0:
+                    path_info.append("1️⃣ Cliquez pour choisir le DÉPART")
+                elif self.pathfinding_step == 1:
+                    path_info.append("2️⃣ Cliquez pour choisir l'ARRIVÉE")
+                    if self.path_start:
+                        path_info.append(
+                            f"   Départ: ({self.path_start[0]}, {self.path_start[1]})"
+                        )
+                elif self.pathfinding_step == 2:
+                    path_info.append("3️⃣ Cliquez pour RECOMMENCER")
+
+                # Afficher les statistiques si disponibles
+                if self.path_stats:
+                    path_info.append("")
+                    if self.path_stats["success"]:
+                        path_info.extend(
+                            [
+                                "✅ CHEMIN TROUVÉ:",
+                                f"   Points: {self.path_stats['path_length']}",
+                                f"   Distance: {self.path_stats['path_distance']:.2f}",
+                                f"   Euclidienne: {self.path_stats['euclidean_distance']:.2f}",
+                                f"   Ratio: {self.path_stats['efficiency_ratio']:.2f}",
+                                f"   Temps: {self.path_stats['computation_time']:.1f}ms",
+                            ]
+                        )
+                    else:
+                        path_info.extend(
+                            [
+                                "❌ AUCUN CHEMIN:",
+                                f"   Erreur: {self.path_stats.get('error', 'Inconnu')}",
+                                f"   Distance eucl: {self.path_stats.get('euclidean_distance', 0):.2f}",
+                            ]
+                        )
+
+                # Afficher les coordonnées des points sélectionnés
+                if self.path_start:
+                    path_info.append("")
+                    path_info.append(
+                        f"🚀 Départ: ({self.path_start[0]}, {self.path_start[1]})"
+                    )
+                if self.path_goal:
+                    path_info.append(
+                        f"🎯 Arrivée: ({self.path_goal[0]}, {self.path_goal[1]})"
+                    )
+
+            else:
+                path_info = [
+                    "🔘 INACTIF - Cliquez sur 'Path'",
+                    "pour activer le test de chemins",
+                    "",
+                    "Fonctionnalités:",
+                    "• Test de pathfinding A*",
+                    "• Visualisation des chemins",
+                    "• Statistiques détaillées",
+                    "• Support obstacles/POIs",
+                ]
+
+            for text in path_info:
+                text_color = (200, 100, 0) if self.pathfinding_mode else COLORS["text"]
+                text_surface = self.small_font.render(text, True, text_color)
+                self.screen.blit(
+                    text_surface, (info_rect.x + 15, info_rect.y + y_offset)
+                )
+                y_offset += line_spacing
+        else:
+            # Pathfinding non disponible
+            self._draw_section_title(
+                "❌ Pathfinding indisponible",
+                info_rect.x + 10,
+                info_rect.y + y_offset,
+                (150, 150, 150),
+            )
+            y_offset += section_spacing
+
+            unavailable_info = [
+                "Module pathfinding manquant",
+                "Installez avec:",
+                "pip install pathfinding",
+            ]
+
+            for text in unavailable_info:
+                text_surface = self.small_font.render(text, True, (150, 150, 150))
+                self.screen.blit(
+                    text_surface, (info_rect.x + 15, info_rect.y + y_offset)
+                )
+                y_offset += line_spacing
+
         # Indicateur de modifications en haut
         if self.has_changes:
             changes_text = self.font.render(
@@ -429,10 +630,16 @@ class GridEditor:
             # Vérifier survol
             button["hovered"] = button["rect"].collidepoint(mouse_pos)
 
-            # Couleur spéciale pour le bouton Coord si actif
+            # Couleur spéciale pour les boutons actifs
             if button["text"] == "Coord" and self.coordinate_mode:
                 color = (100, 150, 255)  # Bleu pour mode actif
                 text_color = (255, 255, 255)  # Texte blanc
+            elif button["text"] == "Path" and self.pathfinding_mode:
+                color = (255, 150, 50)  # Orange pour mode pathfinding actif
+                text_color = (255, 255, 255)  # Texte blanc
+            elif button["text"] == "Path" and not PATHFINDING_AVAILABLE:
+                color = (120, 120, 120)  # Gris pour pathfinding indisponible
+                text_color = (200, 200, 200)  # Texte gris clair
             else:
                 color = (
                     COLORS["button_hover"] if button["hovered"] else COLORS["button"]
@@ -461,6 +668,46 @@ class GridEditor:
         if grid_pos:
             x, y = grid_pos  # x=row, y=col
 
+            # Mode pathfinding : gestion des points start/goal
+            if self.pathfinding_mode and button == 1:  # Clic gauche seulement
+                # Vérifier que la cellule est libre
+                if self.grid[x, y] == -1:  # Obstacle
+                    print(f"❌ Impossible de sélectionner un obstacle en ({x}, {y})")
+                    return
+
+                if self.pathfinding_step == 0:  # Choisir start
+                    self.path_start = (x, y)
+                    self.pathfinding_step = 1
+                    print(
+                        f"🚀 Point de départ sélectionné: ({x}, {y}) - Cliquez pour choisir l'arrivée"
+                    )
+
+                elif self.pathfinding_step == 1:  # Choisir goal
+                    if (x, y) == self.path_start:
+                        print(
+                            "⚠️ Le point d'arrivée doit être différent du point de départ"
+                        )
+                        return
+
+                    self.path_goal = (x, y)
+                    print(
+                        f"🎯 Point d'arrivée sélectionné: ({x}, {y}) - Calcul du chemin..."
+                    )
+
+                    # Calculer le chemin automatiquement
+                    self._compute_pathfinding()
+
+                elif self.pathfinding_step == 2:  # Chemin calculé, recommencer
+                    print("🔄 Nouveau test - Cliquez pour choisir le point de départ")
+                    self._reset_pathfinding()
+                    self.path_start = (x, y)
+                    self.pathfinding_step = 1
+                    print(
+                        f"🚀 Point de départ sélectionné: ({x}, {y}) - Cliquez pour choisir l'arrivée"
+                    )
+
+                return
+
             # Mode coordonnées : afficher les informations
             if self.coordinate_mode:
                 world_x, world_y = self._calculate_world_coordinates(x, y)
@@ -474,22 +721,23 @@ class GridEditor:
                 print(f"   Valeur: {self.grid[x, y]}")
                 return
 
-            # Mode édition normal
-            # Déterminer la valeur selon le bouton
-            if button == 1:  # Clic gauche - zone libre
-                new_value = 0
-            elif button == 3:  # Clic droit - obstacle
-                new_value = -1
-            elif button == 2:  # Clic milieu - POI
-                new_value = 1
-            else:
-                return
+            # Mode édition normal (si pas pathfinding ni coordonnées)
+            if not self.pathfinding_mode and not self.coordinate_mode:
+                # Déterminer la valeur selon le bouton
+                if button == 1:  # Clic gauche - zone libre
+                    new_value = 0
+                elif button == 3:  # Clic droit - obstacle
+                    new_value = -1
+                elif button == 2:  # Clic milieu - POI
+                    new_value = 1
+                else:
+                    return
 
-            # Appliquer modification
-            if self.grid[x, y] != new_value:  # grid[row, col]
-                self.grid[x, y] = new_value
-                self.has_changes = True
-                self._update_stats()
+                # Appliquer modification
+                if self.grid[x, y] != new_value:  # grid[row, col]
+                    self.grid[x, y] = new_value
+                    self.has_changes = True
+                    self._update_stats()
 
     def _handle_mouse_drag(self, pos: Tuple[int, int]):
         """Gère le glissement de souris."""
@@ -819,6 +1067,111 @@ class GridEditor:
         finally:
             root.destroy()
 
+    def _toggle_pathfinding_mode(self):
+        """Active/désactive le mode pathfinding."""
+        if not PATHFINDING_AVAILABLE:
+            messagebox.showerror(
+                "Pathfinding indisponible",
+                "Le module pathfinding n'est pas disponible.\nInstallez avec: pip install pathfinding",
+            )
+            return
+
+        self.pathfinding_mode = not self.pathfinding_mode
+
+        if self.pathfinding_mode:
+            # Désactiver le mode coordonnées s'il est actif
+            self.coordinate_mode = False
+            # Réinitialiser l'état du pathfinding
+            self._reset_pathfinding()
+            print(
+                "🎯 Mode pathfinding activé - Cliquez pour choisir le point de départ"
+            )
+        else:
+            self._reset_pathfinding()
+            print("🔘 Mode pathfinding désactivé")
+
+    def _reset_pathfinding(self):
+        """Remet à zéro l'état du pathfinding."""
+        self.path_start = None
+        self.path_goal = None
+        self.computed_path = None
+        self.path_stats = None
+        self.pathfinding_step = 0
+
+    def _compute_pathfinding(self):
+        """Calcule le chemin entre start et goal."""
+        if not self.path_start or not self.path_goal:
+            return
+
+        try:
+            # Créer le solver
+            poi_coords = np.array([self.path_start, self.path_goal])
+
+            solver = PathfindingSolverFactory.create_solver(
+                grid_with_poi=self.grid,
+                jps_cache={},
+                distance_threshold_grid=1000000.0,  # Seuil très élevé
+                poi_coords=poi_coords,
+                algorithm=self.pathfinding_algorithm,
+                diagonal_movement=True,
+            )
+
+            # Calculer le chemin
+            start_time = time.time()
+            path = solver.find_path(self.path_start, self.path_goal)
+            computation_time = time.time() - start_time
+
+            # Calculer statistiques
+            euclidean_dist = np.sqrt(
+                (self.path_goal[0] - self.path_start[0]) ** 2
+                + (self.path_goal[1] - self.path_start[1]) ** 2
+            )
+
+            if path:
+                path_distance = 0.0
+                if len(path) > 1:
+                    for i in range(len(path) - 1):
+                        p1, p2 = path[i], path[i + 1]
+                        path_distance += np.sqrt(
+                            (p2[0] - p1[0]) ** 2 + (p2[1] - p1[1]) ** 2
+                        )
+
+                self.path_stats = {
+                    "success": True,
+                    "algorithm": self.pathfinding_algorithm.upper(),
+                    "computation_time": computation_time * 1000,  # en ms
+                    "path_length": len(path),
+                    "euclidean_distance": euclidean_dist,
+                    "path_distance": path_distance,
+                    "efficiency_ratio": (
+                        path_distance / euclidean_dist if euclidean_dist > 0 else 0
+                    ),
+                }
+
+                print(
+                    f"✅ Chemin trouvé: {len(path)} points, distance: {path_distance:.2f}"
+                )
+            else:
+                self.path_stats = {
+                    "success": False,
+                    "algorithm": self.pathfinding_algorithm.upper(),
+                    "computation_time": computation_time * 1000,
+                    "euclidean_distance": euclidean_dist,
+                    "error": "Aucun chemin trouvé",
+                }
+                print("❌ Aucun chemin trouvé")
+
+            self.computed_path = path
+            self.pathfinding_step = 2
+
+        except Exception as e:
+            self.path_stats = {
+                "success": False,
+                "error": str(e),
+                "algorithm": self.pathfinding_algorithm.upper(),
+            }
+            print(f"❌ Erreur pathfinding: {e}")
+
     def _toggle_coordinate_mode(self):
         """Active/désactive le mode coordonnées."""
         self.coordinate_mode = not self.coordinate_mode
@@ -924,6 +1277,13 @@ Le nom correspond au hash XXH3 du contenu."""
                 self._adjust_window_size()
         elif key == pygame.K_F1:
             self._show_help()
+        elif key == pygame.K_p:
+            self._toggle_pathfinding_mode()
+        elif key == pygame.K_c:
+            self._toggle_coordinate_mode()
+        elif key == pygame.K_SPACE and self.pathfinding_mode:
+            # Barre espace pour recommencer le pathfinding
+            self._reset_pathfinding()
 
     def _show_help(self):
         """Affiche l'aide."""
@@ -947,6 +1307,9 @@ RACCOURCIS CLAVIER:
 • Ctrl+O: Ouvrir fichier
 • +/-: Ajuster le zoom
 • F1: Afficher cette aide
+• P: Activer/désactiver mode pathfinding
+• C: Activer/désactiver mode coordonnées
+• ESPACE: Reset pathfinding (si mode actif)
 
 BOUTONS:
 • Nouveau: Créer une grille (dimensions personnalisées)
@@ -954,12 +1317,24 @@ BOUTONS:
 • Sauver: Sauvegarder au format .h5
 • Reset: Annuler modifications
 • Taille: Redimensionner la grille
+• Coord: Mode coordonnées (affichage infos)
+• Path: Mode pathfinding (test de chemins)
 • Quitter: Fermer l'éditeur
+
+MODE PATHFINDING:
+• Activez avec bouton 'Path' ou touche 'P'
+• 1. Cliquez sur case libre pour point de départ
+• 2. Cliquez sur case libre pour point d'arrivée
+• 3. Le chemin s'affiche automatiquement
+• Statistiques: longueur, distance, temps calcul
+• Visualisation: ligne orange, points rouge/bleu
+• Cliquez n'importe où pour recommencer
 
 CONSEILS:
 • Utilisez des allées de 1-2 cellules de large
 • Respectez les proportions réelles d'un magasin
 • Testez la navigation entre tous les POIs
+• Le pathfinding aide à valider la connectivité
 • Sauvegardez régulièrement votre travail
         """
 

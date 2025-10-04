@@ -18,6 +18,8 @@ from api_products.path_optimization import (
     StoreLayoutCacheManager,
     POIMapper,
     OptimizedJPS,
+    PathfindingSolver,
+    PathfindingSolverFactory,
     TSPSolver,
     FinalPathGenerator,
     load_layout_from_h5,
@@ -66,6 +68,13 @@ class PathOptimizationRequest(BaseModel):
     )
     include_return_to_start: bool = Field(
         default=False, description="Include return path to starting POI"
+    )
+    pathfinding_algorithm: str = Field(
+        default="astar",
+        description="Pathfinding algorithm: 'astar', 'dijkstra', 'best_first', or 'jps'",
+    )
+    diagonal_movement: bool = Field(
+        default=False, description="Allow diagonal movements (ignored for JPS)"
     )
 
 
@@ -214,11 +223,49 @@ async def optimize_shopping_path(
         layout_hash, jps_cache = cache_manager.update_cache_if_needed(grid_with_poi)
         cache_used = layout_hash == current_hash
 
-        # Step 4: JPS path computation
-        jps_solver = OptimizedJPS(
-            grid_with_poi, jps_cache, distance_threshold_grid, poi_grid_coords
-        )
-        distance_matrix, path_matrix = jps_solver.compute_all_paths()
+        # Step 4: Pathfinding computation
+        # Choose solver based on algorithm parameter
+        if request.pathfinding_algorithm == "jps":
+            # Use original JPS solver
+            solver = OptimizedJPS(
+                grid_with_poi, jps_cache, distance_threshold_grid, poi_grid_coords
+            )
+            logger.info("Using JPS pathfinding algorithm")
+        else:
+            # Use pathfinding library solver
+            try:
+                solver = PathfindingSolverFactory.create_solver(
+                    grid_with_poi=grid_with_poi,
+                    jps_cache=jps_cache,  # Ignored but required for interface compatibility
+                    distance_threshold_grid=distance_threshold_grid,
+                    poi_coords=poi_grid_coords,
+                    algorithm=request.pathfinding_algorithm,
+                    diagonal_movement=request.diagonal_movement,
+                )
+                logger.info(
+                    f"Using {request.pathfinding_algorithm.upper()} pathfinding algorithm"
+                )
+            except ImportError:
+                # Fallback to JPS if pathfinding library not available
+                logger.warning("pathfinding library not available, falling back to JPS")
+                solver = OptimizedJPS(
+                    grid_with_poi, jps_cache, distance_threshold_grid, poi_grid_coords
+                )
+            except ValueError as e:
+                # Invalid algorithm, fallback to A*
+                logger.warning(
+                    f"Invalid algorithm {request.pathfinding_algorithm}, falling back to A*"
+                )
+                solver = PathfindingSolverFactory.create_solver(
+                    grid_with_poi=grid_with_poi,
+                    jps_cache=jps_cache,
+                    distance_threshold_grid=distance_threshold_grid,
+                    poi_coords=poi_grid_coords,
+                    algorithm="astar",
+                    diagonal_movement=request.diagonal_movement,
+                )
+
+        distance_matrix, path_matrix = solver.compute_all_paths()
 
         # Step 5: TSP solving
         tsp_solver = TSPSolver(distance_matrix, max_runtime=request.max_runtime)
@@ -237,7 +284,7 @@ async def optimize_shopping_path(
         computation_time = time.time() - start_time
 
         # Get statistics
-        optimization_stats = jps_solver.get_optimization_stats()
+        optimization_stats = solver.get_optimization_stats()
         path_summary = path_generator.get_path_summary()
 
         logger.info(
@@ -430,6 +477,40 @@ async def optimize_shopping_list(
     except Exception as e:
         logger.error(f"Shopping list optimization error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Optimization failed: {str(e)}")
+
+
+@router.get("/pathfinding_algorithms")
+async def get_pathfinding_algorithms(user_info: dict = Depends(verify_api_key)):
+    """
+    Get list of available pathfinding algorithms and their recommendations.
+    """
+    try:
+        algorithms = ["jps"] + PathfindingSolverFactory.get_available_algorithms()
+
+        return {
+            "success": True,
+            "algorithms": algorithms,
+            "descriptions": {
+                "jps": "Jump Point Search - Optimized for grid-based pathfinding with diagonal movements",
+                "astar": "A* Algorithm - Balanced performance and optimality, good general purpose",
+                "dijkstra": "Dijkstra's Algorithm - Guaranteed shortest path, slower but very reliable",
+                "best_first": "Best First Search - Faster for large grids, may not find optimal path",
+            },
+            "recommendations": {
+                "small_grid_few_pois": "astar",
+                "large_grid_many_pois": "best_first",
+                "maximum_reliability": "dijkstra",
+                "diagonal_optimization": "jps",
+            },
+            "default": "astar",
+        }
+    except Exception as e:
+        logger.error(f"Error getting pathfinding algorithms: {str(e)}")
+        return {
+            "success": False,
+            "algorithms": ["jps"],  # Fallback to JPS only
+            "error": str(e),
+        }
 
 
 @router.post("/estimate_collection_time")
