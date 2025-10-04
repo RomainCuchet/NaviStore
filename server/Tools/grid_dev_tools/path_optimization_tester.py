@@ -373,18 +373,8 @@ class PathOptimizationTester:
                 pygame.draw.rect(self.screen, color, cell_rect)
                 pygame.draw.rect(self.screen, COLORS["grid_line"], cell_rect, 1)
 
-                # Dessiner les POIs par-dessus en rouge (pour qu'ils restent visibles)
-                if (y, x) in self.poi_coords_grid:  # (row, col)
-                    # Dessiner un cercle rouge au centre de la cellule pour le POI
-                    center_x = pixel_x + self.cell_size // 2
-                    center_y = pixel_y + self.cell_size // 2
-                    radius = min(self.cell_size // 3, 8)  # Rayon adaptatif
-                    pygame.draw.circle(
-                        self.screen, COLORS["poi"], (center_x, center_y), radius
-                    )
-                    pygame.draw.circle(
-                        self.screen, COLORS["text"], (center_x, center_y), radius, 2
-                    )  # Contour noir
+                # Note: Les POIs sont maintenant dessinés séparément via draw_pois()
+                # pour éviter d'être écrasés par les points du chemin
 
     def draw_path_lines(self):
         """Dessine les lignes du chemin et les waypoints."""
@@ -407,14 +397,45 @@ class PathOptimizationTester:
                 self.screen, COLORS["path"], (start_x, start_y), (end_x, end_y), 2
             )
 
-        # Dessiner les points aux waypoints
+        # Dessiner les points aux waypoints (plus petits pour ne pas écraser les POIs)
         for row, col in self.optimal_path:
             center_x = self.offset_x + col * self.cell_size + self.cell_size // 2
             center_y = self.offset_y + row * self.cell_size + self.cell_size // 2
 
-            # Point vert avec contour noir
-            pygame.draw.circle(self.screen, COLORS["path"], (center_x, center_y), 4)
-            pygame.draw.circle(self.screen, COLORS["text"], (center_x, center_y), 4, 2)
+            # Point vert plus petit avec contour noir
+            pygame.draw.circle(self.screen, COLORS["path"], (center_x, center_y), 3)
+            pygame.draw.circle(self.screen, COLORS["text"], (center_x, center_y), 3, 1)
+
+    def draw_pois(self):
+        """Dessine les POIs par-dessus tout pour qu'ils restent visibles."""
+        for i, (row, col) in enumerate(self.poi_coords_grid):
+            if 0 <= row < self.grid_height and 0 <= col < self.grid_width:
+                center_x = self.offset_x + col * self.cell_size + self.cell_size // 2
+                center_y = self.offset_y + row * self.cell_size + self.cell_size // 2
+                radius = min(
+                    self.cell_size // 3, 10
+                )  # Rayon légèrement plus grand pour le texte
+
+                # POI rouge avec contour noir plus épais pour meilleure visibilité
+                pygame.draw.circle(
+                    self.screen, COLORS["poi"], (center_x, center_y), radius
+                )
+                pygame.draw.circle(
+                    self.screen, COLORS["text"], (center_x, center_y), radius, 2
+                )  # Contour noir
+
+                # Afficher le numéro du POI au centre
+                poi_number = str(i)
+                # Choisir la taille de police en fonction du rayon
+                font_size = max(12, min(16, radius))
+                number_font = pygame.font.Font(None, font_size)
+                text_surface = number_font.render(
+                    poi_number, True, COLORS["background"]
+                )  # Blanc pour contraste
+
+                # Centrer le texte dans le cercle
+                text_rect = text_surface.get_rect(center=(center_x, center_y))
+                self.screen.blit(text_surface, text_rect)
 
     def draw_ui(self):
         """Dessine l'interface utilisateur."""
@@ -538,11 +559,12 @@ class PathOptimizationTester:
                     if event.key == pygame.K_ESCAPE:
                         self.running = False
 
-            # Rendu
+            # Rendu avec ordre spécifique pour visibilité
             self.screen.fill(COLORS["background"])
-            self.draw_grid()
-            self.draw_path_lines()  # Dessiner les lignes du chemin par-dessus
-            self.draw_ui()
+            self.draw_grid()  # 1. Grille et obstacles
+            self.draw_path_lines()  # 2. Chemin (lignes et points verts)
+            self.draw_pois()  # 3. POIs par-dessus tout (points rouges)
+            self.draw_ui()  # 4. Interface utilisateur
             pygame.display.flip()
             clock.tick(60)
 
