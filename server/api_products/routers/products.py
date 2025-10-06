@@ -8,7 +8,7 @@ from api_products.crud import (
     __get_products_by_ids,
     __get_product_categories,
 )
-from api_products.auth import verify_api_key, require_write_rights
+from api_products.auth import verify_api_key, verify_write_rights
 
 router = APIRouter(prefix="/products", tags=["Products"])
 

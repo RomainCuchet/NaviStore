@@ -15,7 +15,8 @@ class FinalPathGenerator:
     """
     Generates the final complete path for shopping route execution.
 
-    Reconstructs full path from TSP visiting order and JPS computed paths.
+    Reconstructs full path from TSP visiting order and computed paths.
+    Includes A* fallback for missing path segments.
     """
 
     def __init__(
@@ -23,6 +24,9 @@ class FinalPathGenerator:
         path_matrix: List[List[Optional[List[Tuple[int, int]]]]],
         visiting_order: List[int],
         poi_coords: np.ndarray,
+        grid_with_poi: Optional[np.ndarray] = None,
+        pathfinding_algorithm: str = "astar",
+        diagonal_movement: bool = False,
     ):
         """
         Initialize the final path generator.
@@ -31,13 +35,30 @@ class FinalPathGenerator:
             path_matrix: Matrix of paths between POIs from PathfindingSolver
             visiting_order: Optimal visiting order from TSPSolver
             poi_coords: Array of POI coordinates in grid space
+            grid_with_poi: Grid layout for fallback pathfinding (optional)
+            pathfinding_algorithm: Algorithm for fallback pathfinding
+            diagonal_movement: Allow diagonal movement in fallback pathfinding
         """
         self.path_matrix = path_matrix
         self.visiting_order = visiting_order
         self.poi_coords = poi_coords
         self.n_pois = len(poi_coords)
 
-        logger.info(f"Initialized FinalPathGenerator for {len(visiting_order)} POIs")
+        # Fallback pathfinding configuration
+        self.grid_with_poi = grid_with_poi
+        self.pathfinding_algorithm = pathfinding_algorithm
+        self.diagonal_movement = diagonal_movement
+
+        # Statistics for fallback usage
+        self.fallback_stats = {
+            "fallback_calls": 0,
+            "fallback_successes": 0,
+            "fallback_failures": 0,
+        }
+
+        logger.info(
+            f"Initialized FinalPathGenerator for {len(visiting_order)} POIs with fallback={'enabled' if grid_with_poi is not None else 'disabled'}"
+        )
 
     def _validate_inputs(self) -> None:
         """
@@ -71,25 +92,105 @@ class FinalPathGenerator:
                     f"expected {self.n_pois}"
                 )
 
-    def _get_path_between_pois(
+    def _fallback_pathfinding(
         self, from_poi: int, to_poi: int
     ) -> Optional[List[Tuple[int, int]]]:
         """
-        Get path between two POIs from the path matrix.
+        Fallback pathfinding using A* when no cached path is available.
 
         Args:
             from_poi: Source POI index
             to_poi: Destination POI index
 
         Returns:
-            Path between POIs or None if no path exists
+            Computed path or None if pathfinding fails
+        """
+        if self.grid_with_poi is None:
+            logger.warning(
+                f"No grid available for fallback pathfinding {from_poi} -> {to_poi}"
+            )
+            return None
+
+        self.fallback_stats["fallback_calls"] += 1
+
+        try:
+            # Import PathfindingSolver locally to avoid circular imports
+            from .pathfinding_solver import PathfindingSolver
+
+            start = tuple(self.poi_coords[from_poi])
+            goal = tuple(self.poi_coords[to_poi])
+
+            logger.info(
+                f"Fallback A* pathfinding: POI {from_poi} {start} -> POI {to_poi} {goal}"
+            )
+
+            # Create temporary solver with infinite threshold for fallback
+            fallback_solver = PathfindingSolver(
+                grid_with_poi=self.grid_with_poi,
+                distance_threshold_grid=float("inf"),  # No distance limit for fallback
+                poi_coords=np.array([start, goal]),
+                algorithm=self.pathfinding_algorithm,
+                diagonal_movement=self.diagonal_movement,
+            )
+
+            # Calculate path using A*
+            path = fallback_solver.find_path(start, goal)
+
+            if path is not None:
+                self.fallback_stats["fallback_successes"] += 1
+                logger.info(f"Fallback A* found path: {len(path)} points")
+
+                # Cache the computed path for future use
+                self.path_matrix[from_poi][to_poi] = path
+
+                return path
+            else:
+                self.fallback_stats["fallback_failures"] += 1
+                logger.warning(f"Fallback A* failed: no path {from_poi} -> {to_poi}")
+                return None
+
+        except Exception as e:
+            self.fallback_stats["fallback_failures"] += 1
+            logger.error(f"Fallback pathfinding error {from_poi} -> {to_poi}: {e}")
+            return None
+
+    def _get_path_between_pois(
+        self, from_poi: int, to_poi: int
+    ) -> Optional[List[Tuple[int, int]]]:
+        """
+        Get path between two POIs from the path matrix with A* fallback.
+
+        Args:
+            from_poi: Source POI index
+            to_poi: Destination POI index
+
+        Returns:
+            Path between POIs, computed from cache or A* fallback
         """
         if from_poi == to_poi:
             return [tuple(self.poi_coords[from_poi])]
 
+        # Try to get cached path first
         path = self.path_matrix[from_poi][to_poi]
+
         if path is None:
-            logger.warning(f"No path found between POI {from_poi} and POI {to_poi}")
+            logger.warning(
+                f"No cached path between POI {from_poi} and POI {to_poi}, trying fallback A*"
+            )
+
+            # Attempt fallback pathfinding
+            fallback_path = self._fallback_pathfinding(from_poi, to_poi)
+
+            if fallback_path is not None:
+                logger.info(
+                    f"Fallback A* successfully computed path {from_poi} -> {to_poi}"
+                )
+                return fallback_path
+            else:
+                logger.error(
+                    f"Both cached and fallback pathfinding failed {from_poi} -> {to_poi}"
+                )
+                return None
 
         return path
 
@@ -126,9 +227,9 @@ class FinalPathGenerator:
             segment_path = self._get_path_between_pois(current_poi, next_poi)
 
             if segment_path is None:
-                # Fallback: direct line to POI coordinate
-                logger.warning(
-                    f"Using direct path from POI {current_poi} to POI {next_poi}"
+                # Last resort: direct line to POI coordinate
+                logger.error(
+                    f"No path available between POI {current_poi} and POI {next_poi}, using direct connection"
                 )
                 if not complete_path:
                     complete_path.append(tuple(self.poi_coords[current_poi]))
@@ -243,7 +344,7 @@ class FinalPathGenerator:
         Get summary information about the generated path.
 
         Returns:
-            Dictionary with path summary
+            Dictionary with path summary including fallback statistics
         """
         complete_path = self.generate_complete_path()
 
@@ -267,4 +368,28 @@ class FinalPathGenerator:
                 if self.visiting_order
                 else None
             ),
+            "fallback_pathfinding": self.fallback_stats,
+        }
+
+    def get_fallback_stats(self) -> dict:
+        """
+        Get detailed fallback pathfinding statistics.
+
+        Returns:
+            Dictionary with fallback statistics
+        """
+        total_calls = self.fallback_stats["fallback_calls"]
+        success_rate = (
+            self.fallback_stats["fallback_successes"] / total_calls
+            if total_calls > 0
+            else 0
+        )
+
+        return {
+            "fallback_calls": total_calls,
+            "fallback_successes": self.fallback_stats["fallback_successes"],
+            "fallback_failures": self.fallback_stats["fallback_failures"],
+            "fallback_success_rate": f"{success_rate:.2%}",
+            "fallback_enabled": self.grid_with_poi is not None,
+            "fallback_algorithm": self.pathfinding_algorithm,
         }

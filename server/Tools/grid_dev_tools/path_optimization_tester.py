@@ -154,7 +154,9 @@ class PathOptimizationTester:
             count = len(free_positions)
 
         # Choisir aléatoirement des positions
-        selected_positions = random.sample(free_positions, count)
+        selected_positions = random.sample(free_positions, count - 1)
+        if (29, 19) in free_positions:
+            selected_positions.append((29, 19))
 
         # Convertir en coordonnées monde (centre des cellules)
         poi_coords_real = []

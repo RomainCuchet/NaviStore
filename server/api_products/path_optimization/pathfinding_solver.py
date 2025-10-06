@@ -28,30 +28,28 @@ logger = logging.getLogger(__name__)
 
 class PathfindingSolver:
     """
-    Solver de pathfinding utilisant la librairie pathfinding.
+    Pathfinding solver using the pathfinding library.
 
-    Support des seuils de distance et optimisations de performance.
+    Supports distance thresholds and performance optimizations.
     """
 
     def __init__(
         self,
         grid_with_poi: np.ndarray,
-        jps_cache: dict,  # Ignoré mais gardé pour compatibilité
         distance_threshold_grid: float,
         poi_coords: np.ndarray,
         algorithm: str = "astar",
         diagonal_movement: bool = True,
     ):
         """
-        Initialize le solver pathfinding.
+        Initialize pathfinding solver.
 
         Args:
-            grid_with_poi: Grille avec POIs marqués (0=navigable, 1=POI, -1=obstacle)
-            jps_cache: Cache JPS (ignoré, gardé pour compatibilité)
-            distance_threshold_grid: Seuil de distance en unités de grille
-            poi_coords: Coordonnées des POIs dans l'espace grille
-            algorithm: Algorithme à utiliser ('astar', 'dijkstra', 'best_first')
-            diagonal_movement: Autoriser les mouvements diagonaux
+            grid_with_poi: Grid with POIs marked (0=walkable, 1=POI, -1=obstacle)
+            distance_threshold_grid: Distance threshold in grid units
+            poi_coords: POI coordinates in grid space
+            algorithm: Algorithm to use ('astar', 'dijkstra', 'best_first')
+            diagonal_movement: Allow diagonal movements
         """
         self.grid_array = grid_with_poi
         self.distance_threshold = distance_threshold_grid
@@ -60,17 +58,13 @@ class PathfindingSolver:
         self.algorithm = algorithm
         self.diagonal_movement = diagonal_movement
 
-        # Créer le finder selon l'algorithme choisi
         self._create_finder()
 
-        # Statistiques de performance
         self.stats = {
             "paths_computed": 0,
             "paths_failed": 0,
             "total_computation_time": 0.0,
             "average_path_length": 0.0,
-            "cache_hits": 0,  # Toujours 0 (pas de cache)
-            "cache_misses": 0,  # Toujours 0 (pas de cache)
             "algorithm_used": algorithm,
             "diagonal_enabled": diagonal_movement,
         }
@@ -105,47 +99,47 @@ class PathfindingSolver:
         self, start: Tuple[int, int], goal: Tuple[int, int]
     ) -> Optional[List[Tuple[int, int]]]:
         """
-        Trouve un chemin entre deux points.
+        Find a path between two points.
 
         Args:
-            start: Point de départ (x, y)
-            goal: Point d'arrivée (x, y)
+            start: Starting point (x, y)
+            goal: End point (x, y)
 
         Returns:
-            Liste des coordonnées du chemin ou None si aucun chemin
+            List of path coordinates or None if no path found
         """
         try:
             start_time = time.time()
 
-            # Créer une nouvelle grille pour chaque recherche (la méthode clone() n'existe pas)
-            # Recréer la grille avec les mêmes données
+            # Create a new grid for each search (clone() method doesn't exist)
+            # Recreate grid with same data
             walkable_matrix = (self.grid_array >= 0).astype(int)
             grid = Grid(matrix=walkable_matrix)
 
-            # Obtenir les nœuds start et goal
-            # CORRECTION: pathfinding lib utilise node(x, y) où x=col, y=row
-            # Nos coordonnées sont (row, col), donc il faut inverser
+            # Get start and goal nodes
+            # NOTE: pathfinding lib uses node(x, y) where x=col, y=row
+            # Our coordinates are (row, col), so we need to swap
             start_node = grid.node(start[1], start[0])  # (col, row)
             goal_node = grid.node(goal[1], goal[0])  # (col, row)
 
-            # Vérifier que les nœuds sont walkable
+            # Check if nodes are walkable
             if not start_node.walkable or not goal_node.walkable:
-                logger.debug(f"Start {start} ou goal {goal} non walkable")
+                logger.debug(f"Start {start} or goal {goal} not walkable")
                 return None
 
-            # Recherche de chemin
+            # Find path
             path, runs = self.finder.find_path(start_node, goal_node, grid)
 
             computation_time = time.time() - start_time
             self.stats["total_computation_time"] += computation_time
 
             if path:
-                # Convertir en liste de tuples (row, col)
-                # CORRECTION: node.x=col, node.y=row, donc il faut inverser
+                # Convert to list of tuples (row, col)
+                # NOTE: node.x=col, node.y=row, so we need to swap
                 path_coords = [(node.y, node.x) for node in path]  # (row, col)
                 self.stats["paths_computed"] += 1
 
-                # Mettre à jour moyenne longueur de chemin
+                # Update average path length
                 total_paths = self.stats["paths_computed"]
                 current_avg = self.stats["average_path_length"]
                 new_length = len(path_coords)
@@ -172,10 +166,10 @@ class PathfindingSolver:
         self,
     ) -> Tuple[np.ndarray, List[List[Optional[List[Tuple[int, int]]]]]]:
         """
-        Calcule toutes les distances et chemins entre POIs.
+        Compute all distances and paths between POIs.
 
         Returns:
-            Tuple de (matrice_distances, matrice_chemins)
+            Tuple of (distance_matrix, path_matrix)
         """
         logger.info(f"Computing all paths with {self.algorithm.upper()} pathfinding...")
         start_time = time.time()
@@ -199,20 +193,21 @@ class PathfindingSolver:
                 start = tuple(self.poi_coords[i])
                 goal = tuple(self.poi_coords[j])
 
-                # Vérifier le seuil de distance euclidienne
+                # Check euclidian distance threshold
                 euclidean_dist = euclidean_distance(start, goal)
                 if euclidean_dist > self.distance_threshold:
                     paths_skipped_threshold += 1
                     logger.debug(
                         f"Skipping {start} -> {goal}: distance {euclidean_dist:.2f} > threshold {self.distance_threshold:.2f}"
                     )
+                    distance_matrix[i, j] = euclidean_dist * 3
                     continue
 
-                # Rechercher le chemin
+                # Find path
                 path = self.find_path(start, goal)
 
                 if path:
-                    # Calculer la distance réelle du chemin
+                    # Compute the real length of the path
                     path_length = 0
                     for k in range(len(path) - 1):
                         path_length += euclidean_distance(path[k], path[k + 1])
@@ -242,8 +237,8 @@ class PathfindingSolver:
 
     def get_optimization_stats(self) -> Dict:
         """
+        Returns optimisation statistics
         Retourne les statistiques d'optimisation.
-        Compatible avec l'interface OptimizedJPS.
         """
         total_paths = self.stats["paths_computed"] + self.stats["paths_failed"]
         success_rate = (
@@ -266,7 +261,7 @@ class PathfindingSolver:
         }
 
     def get_pathfinding_info(self) -> Dict:
-        """Retourne des informations détaillées sur le solver."""
+        """Returns detailed information about the solver."""
         return {
             "solver_type": "pathfinding_library",
             "algorithm": self.algorithm,
@@ -288,14 +283,12 @@ class PathfindingSolver:
         }
 
 
-# Classe d'usine pour créer le bon solver
 class PathfindingSolverFactory:
-    """Factory pour créer des solvers pathfinding avec différents algorithmes."""
+    """Factory to create pathfinding solvers with different algorithms."""
 
     @staticmethod
     def create_solver(
         grid_with_poi: np.ndarray,
-        jps_cache: dict,
         distance_threshold_grid: float,
         poi_coords: np.ndarray,
         algorithm: str = "astar",
@@ -306,7 +299,6 @@ class PathfindingSolverFactory:
 
         Args:
             grid_with_poi: Grille avec POIs
-            jps_cache: Cache (ignoré)
             distance_threshold_grid: Seuil de distance
             poi_coords: Coordonnées POIs
             algorithm: Algorithme ('astar', 'dijkstra', 'best_first')
@@ -317,7 +309,6 @@ class PathfindingSolverFactory:
         """
         return PathfindingSolver(
             grid_with_poi=grid_with_poi,
-            jps_cache=jps_cache,
             distance_threshold_grid=distance_threshold_grid,
             poi_coords=poi_coords,
             algorithm=algorithm,
@@ -326,24 +317,24 @@ class PathfindingSolverFactory:
 
     @staticmethod
     def get_available_algorithms() -> List[str]:
-        """Retourne la liste des algorithmes disponibles."""
+        """Returns the list of available algorithms."""
         return ["astar", "dijkstra", "best_first"]
 
     @staticmethod
     def get_recommended_algorithm(grid_size: int, poi_count: int) -> str:
         """
-        Recommande un algorithme basé sur la taille de grille et nombre de POIs.
+        Recommends an algorithm based on grid size and POI count.
 
         Args:
-            grid_size: Taille de la grille (width * height)
-            poi_count: Nombre de POIs
+            grid_size: Grid size (width * height)
+            poi_count: Number of POIs
 
         Returns:
-            Nom de l'algorithme recommandé
+            Name of recommended algorithm
         """
         if grid_size > 10000 and poi_count > 20:
-            return "best_first"  # Plus rapide pour grandes grilles
+            return "best_first"  # Faster for large grid
         elif poi_count > 50:
-            return "dijkstra"  # Plus fiable pour beaucoup de POIs
+            return "dijkstra"  # Better for large number of POI
         else:
-            return "astar"  # Équilibré pour cas généraux
+            return "astar"  # Best in most cases

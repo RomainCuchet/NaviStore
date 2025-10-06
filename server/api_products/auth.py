@@ -17,10 +17,11 @@ def verify_api_key(x_api_key: str = Header(...)):
     raise HTTPException(status_code=401, detail="Invalid API Key")
 
 
-def require_write_rights(user_info=Depends(verify_api_key)):
+def verify_write_rights(user_info=Depends(verify_api_key)):
     """
+    Verifies that the user has write privilege
+    ONly users with role='write' or better can read and write.
     Vérifie que l'utilisateur a des droits d'écriture.
-    Les utilisateurs avec role='write' peuvent lire ET écrire.
     """
     if user_info["role"] != "write":
         raise HTTPException(status_code=403, detail="Permission denied: read-only user")

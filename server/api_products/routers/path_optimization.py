@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 import logging
 import json
 
-from api_products.auth import verify_api_key
+from api_products.auth import verify_api_key, verify_write_rights
 from api_products.path_optimization import (
     StoreLayoutManager,
     POIMapper,
@@ -91,7 +91,7 @@ async def upload_store_layout(
     layout_file: UploadFile = File(
         ..., description="HDF5 file containing store layout"
     ),
-    user_info: dict = Depends(verify_api_key),
+    user_info: dict = Depends(verify_write_rights),
 ):
     """
     Upload store layout HDF5 file.
@@ -200,7 +200,7 @@ async def optimize_shopping_path(
                 detail="At least 2 POIs are required for path optimization",
             )
 
-        # Step 1: Cache management
+        # Step 1: Layout versioning management
         layout_manager = StoreLayoutManager(
             layout, current_hash, svg_assets_dir="assets/svg"
         )
@@ -213,13 +213,12 @@ async def optimize_shopping_path(
         poi_grid_coords = poi_mapper.get_poi_grid_coordinates()
 
         # Step 3: Update svg assets if needed
-        layout_hash, jps_cache = layout_manager.update_svg_if_needed()
+        layout_hash, svg_path = layout_manager.update_svg_if_needed()
         generated_layout_svg = layout_hash == current_hash
 
         try:
             solver = PathfindingSolverFactory.create_solver(
                 grid_with_poi=grid_with_poi,
-                jps_cache=jps_cache,  # Ignored but required for interface compatibility
                 distance_threshold_grid=distance_threshold_grid,
                 poi_coords=poi_grid_coords,
                 algorithm=request.pathfinding_algorithm,
@@ -239,7 +238,6 @@ async def optimize_shopping_path(
             )
             solver = PathfindingSolverFactory.create_solver(
                 grid_with_poi=grid_with_poi,
-                jps_cache=jps_cache,
                 distance_threshold_grid=distance_threshold_grid,
                 poi_coords=poi_grid_coords,
                 algorithm="astar",
@@ -252,9 +250,14 @@ async def optimize_shopping_path(
         tsp_solver = TSPSolver(distance_matrix, max_runtime=request.max_runtime)
         visiting_order = tsp_solver.solve()
 
-        # Step 6: Final path generation
+        # Step 6: Final path generation with A* fallback support
         path_generator = FinalPathGenerator(
-            path_matrix, visiting_order, poi_grid_coords
+            path_matrix=path_matrix,
+            visiting_order=visiting_order,
+            poi_coords=poi_grid_coords,
+            grid_with_poi=grid_with_poi,
+            pathfinding_algorithm=request.pathfinding_algorithm,
+            diagonal_movement=request.diagonal_movement,
         )
         complete_path = path_generator.generate_complete_path(
             request.include_return_to_start
