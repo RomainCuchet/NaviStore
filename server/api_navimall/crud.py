@@ -5,7 +5,7 @@ import time
 import logging
 from typing import Optional
 from elasticsearch import Elasticsearch, helpers, ConnectionError, ConnectionTimeout
-from api_products.config import ES_HOST, ES_INDEX
+from api_navimall.config import ES_HOST, ES_INDEX
 
 # Configuration du logging
 logging.basicConfig(level=logging.INFO)
@@ -176,7 +176,7 @@ def ensure_elasticsearch_connection() -> bool:
 def create_index_if_missing():
     """Create the index with mapping if it doesn't exist."""
     if not es.indices.exists(index=ES_INDEX).body:
-        with open("api_products/assets/json/es_mapping.json", "r") as f:
+        with open("api_navimall/assets/json/es_mapping.json", "r") as f:
             mapping = json.load(f)
         es.indices.create(index=ES_INDEX, body=mapping)
         print(f"✅ Index '{ES_INDEX}' created with mapping.")
@@ -188,7 +188,7 @@ def create_index_if_missing():
 def reindex_products():
     """Delete existing docs and load products from products.json into Elasticsearch."""
     try:
-        with open("api_products/assets/json/products.json", "r") as f:
+        with open("api_navimall/assets/json/products.json", "r") as f:
             products = json.load(f)
 
         # Delete all existing docs in the index
@@ -304,7 +304,7 @@ def __get_product_categories():
     """
     try:
         with open(
-            "api_products/assets/json/data_store.json", "r", encoding="utf-8"
+            "api_navimall/assets/json/data_store.json", "r", encoding="utf-8"
         ) as f:
             data = json.load(f)
             categories = data.get("categories", [])

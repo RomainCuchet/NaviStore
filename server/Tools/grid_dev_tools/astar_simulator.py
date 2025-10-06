@@ -31,7 +31,7 @@ from enum import Enum
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
 
 try:
-    from api_products.path_optimization import load_layout_from_h5
+    from api_navimall.path_optimization import load_layout_from_h5
 
     NAVISTORE_AVAILABLE = True
 except ImportError:

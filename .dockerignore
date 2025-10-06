@@ -1,5 +1,5 @@
-server/api_products/tools/
-server/api_products/navistore_server-venv/
+server/api_navimall/tools/
+server/api_navimall/navistore_server-venv/
 server/assets/
 server/tests/
 

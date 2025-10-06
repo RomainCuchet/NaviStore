@@ -83,7 +83,7 @@ VISUAL_CONFIG = {
 1. **Préparer l'environnement**
    ```bash
    # Démarrer le serveur API
-   cd server/api_products
+   cd server/api_navimall
    python main.py
    
    # Dans un autre terminal

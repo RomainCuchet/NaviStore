@@ -1,9 +1,9 @@
 from fastapi import Header, Depends, HTTPException
-from api_products.config import API_KEYS
+from api_navimall.config import API_KEYS
 
 
 from fastapi import Header, HTTPException
-from api_products.config import API_KEYS
+from api_navimall.config import API_KEYS
 
 
 def verify_api_key(x_api_key: str = Header(...)):

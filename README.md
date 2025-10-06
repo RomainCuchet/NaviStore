@@ -1,3 +1,17 @@
+# 🛒 Navimall – Smarter In-Store Navigation
+
+Shopping in a large retail store can quickly become a frustrating experience. Customers often waste time searching for familiar products, wandering through aisles without clear direction, and leaving with a sense of confusion. As a result, many shoppers prefer smaller or already familiar stores — limiting the potential of large retail environments.
+
+Navimall removes that friction.
+The app provides real-time product locations, generates an optimized route to complete your shopping list efficiently, and alerts you to product availability.
+
+👉 For customers: a faster, smoother, and more enjoyable shopping experience.
+👉 For retailers: a powerful tool to improve customer satisfaction, streamline store navigation, and boost engagement with larger retail spaces.
+
+--
+
+
+
 ## Elastic Search
 Elastic Search is a powerful distributed search engine that perfectly suits our project's needs for several reasons:
 

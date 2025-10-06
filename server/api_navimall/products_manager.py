@@ -6,8 +6,8 @@ from collections import defaultdict
 class ProductsManager:
     def __init__(
         self,
-        products_json_path="api_products/assets/json/products.json",
-        data_store_path="api_products/assets/json/data_store.json",
+        products_json_path="api_navimall/assets/json/products.json",
+        data_store_path="api_navimall/assets/json/data_store.json",
     ):
         self.json_path = products_json_path
         self.data_store_path = data_store_path

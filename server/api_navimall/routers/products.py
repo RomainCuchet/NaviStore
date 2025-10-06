@@ -3,12 +3,12 @@ from typing import Optional
 import logging
 import os
 
-from api_products.crud import (
+from api_navimall.crud import (
     __get_products,
     __get_products_by_ids,
     __get_product_categories,
 )
-from api_products.auth import verify_api_key, verify_write_rights
+from api_navimall.auth import verify_api_key, verify_write_rights
 
 router = APIRouter(prefix="/products", tags=["Products"])
 
@@ -18,12 +18,12 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
-        logging.FileHandler("assets/log/api_products.log"),
+        logging.FileHandler("assets/log/api_navimall.log"),
         logging.StreamHandler(),
     ],
 )
 
-logger = logging.getLogger("api_products")
+logger = logging.getLogger("api_navimall")
 
 
 @router.get("/get")

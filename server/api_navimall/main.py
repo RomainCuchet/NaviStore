@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from api_products.routers import products, path_optimization, health
+from api_navimall.routers import products, path_optimization, health
 
 app = FastAPI(title="API Produits")
 

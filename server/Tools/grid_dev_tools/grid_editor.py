@@ -30,7 +30,7 @@ import time
 # Pathfinding imports
 try:
     sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
-    from api_products.path_optimization.pathfinding_solver import (
+    from api_navimall.path_optimization.pathfinding_solver import (
         PathfindingSolver,
         PathfindingSolverFactory,
     )

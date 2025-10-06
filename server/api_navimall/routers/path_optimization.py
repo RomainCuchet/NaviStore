@@ -13,8 +13,8 @@ from pydantic import BaseModel, Field
 import logging
 import json
 
-from api_products.auth import verify_api_key, verify_write_rights
-from api_products.path_optimization import (
+from api_navimall.auth import verify_api_key, verify_write_rights
+from api_navimall.path_optimization import (
     StoreLayoutManager,
     POIMapper,
     PathfindingSolver,
@@ -25,7 +25,7 @@ from api_products.path_optimization import (
     save_hash_to_json,
     load_hash_from_json,
 )
-from api_products.path_optimization.serialization_utils import (
+from api_navimall.path_optimization.serialization_utils import (
     clean_optimization_response,
     clean_poi_summary,
     convert_numpy_types,
@@ -33,7 +33,7 @@ from api_products.path_optimization.serialization_utils import (
 
 router = APIRouter(prefix="/path_optimization", tags=["Path Optimization"])
 
-# Configure logging
+
 logger = logging.getLogger("path_optimization")
 
 # Create directories for caching

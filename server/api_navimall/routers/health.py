@@ -5,7 +5,7 @@ Router pour la santé du système et diagnostics.
 from fastapi import APIRouter, HTTPException
 from typing import Dict, Any
 import time
-from api_products.crud import get_elasticsearch_health, ensure_elasticsearch_connection
+from api_navimall.crud import get_elasticsearch_health, ensure_elasticsearch_connection
 
 router = APIRouter(prefix="/health", tags=["health"])
 
