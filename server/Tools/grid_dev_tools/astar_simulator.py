@@ -44,6 +44,7 @@ COLORS = {
     "navigable": (255, 255, 255),  # Blanc - zone libre
     "obstacle": (0, 0, 0),  # Noir - obstacle
     "poi": (0, 200, 0),  # Vert - POI
+    "shelf": (139, 69, 19),  # Brown - shelf
     "grid_line": (200, 200, 200),  # Gris clair - lignes
     # Pathfinding A*
     "start": (255, 0, 0),  # Rouge - point de départ
@@ -451,7 +452,7 @@ class AStarSimulator:
             if file_path:
                 if NAVISTORE_AVAILABLE:
                     # Utiliser la fonction NaviStore
-                    layout, edge_length = load_layout_from_h5(file_path)
+                    layout, edge_length, _ = load_layout_from_h5(file_path)
                 else:
                     # Lecture manuelle
                     with h5py.File(file_path, "r") as f:
@@ -728,6 +729,8 @@ dans le panneau de droite.
                     color = COLORS["obstacle"]
                 elif cell_value == 1:
                     color = COLORS["poi"]
+                elif cell_value == 2:
+                    color = COLORS["shelf"]
                 else:
                     color = COLORS["navigable"]
 

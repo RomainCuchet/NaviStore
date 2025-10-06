@@ -116,7 +116,7 @@ async def upload_store_layout(
 
         # Validate the file content
         try:
-            layout, edge_length = load_layout_from_h5(temp_path)
+            layout, edge_length, _ = load_layout_from_h5(temp_path)
 
             # Move to permanent location with hash-based name
             cache_manager = StoreLayoutManager(layout)
@@ -189,7 +189,7 @@ async def optimize_shopping_path(
             )
 
         # Load layout and edge length
-        layout, edge_length = load_layout_from_h5(layout_file)
+        layout, edge_length, _ = load_layout_from_h5(layout_file)
 
         # Convert POI coordinates to list of tuples
         poi_coords_real = [(poi.x, poi.y) for poi in request.poi_coordinates]
@@ -324,7 +324,7 @@ async def get_layout_status(user_info: dict = Depends(verify_api_key)):
             }
 
         # Load layout info
-        layout, edge_length = load_layout_from_h5(layout_file)
+        layout, edge_length, _ = load_layout_from_h5(layout_file)
 
         return {
             "layout_uploaded": True,
@@ -361,7 +361,7 @@ async def validate_poi_placement(
             raise HTTPException(status_code=422, detail="No store layout uploaded")
 
         layout_file = os.path.join("assets/layouts", f"{current_hash}.h5")
-        layout, edge_length = load_layout_from_h5(layout_file)
+        layout, edge_length, _ = load_layout_from_h5(layout_file)
 
         # Convert POI coordinates
         poi_coords_real = [(poi.x, poi.y) for poi in request.poi_coordinates]

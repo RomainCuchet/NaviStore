@@ -6,21 +6,42 @@ import h5py
 import numpy as np
 import json
 import os
-from typing import Tuple, Optional
+from typing import Tuple, Optional, List, Dict, Any
 import logging
 
 logger = logging.getLogger(__name__)
 
 
-def load_layout_from_h5(h5_filename: str) -> Tuple[np.ndarray, float]:
+class Zone:
+    """Represents a polygon zone in the store layout."""
+
+    def __init__(self, name: str, points: List[Tuple[float, float]]):
+        self.name = name
+        self.points = points  # List of (x, y) coordinates forming polygon
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {"name": self.name, "points": self.points}
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "Zone":
+        return cls(data["name"], data["points"])
+
+
+def load_layout_from_h5(h5_filename: str) -> Tuple[np.ndarray, float, Dict[str, Zone]]:
     """
-    Load store layout and edge length from HDF5 file.
+    Load store layout, edge length, and zones from HDF5 file.
 
     Args:
         h5_filename: Path to the .h5 file
 
     Returns:
-        Tuple of (layout_array, edge_length_cm)
+        Tuple of (layout_array, edge_length_cm, zones_dict)
+
+    Cell types in layout_array:
+        0 = navigable cell
+        1 = point of interest (POI)
+        -1 = obstacle (non-navigable)
+        2 = shelf (non-navigable)
 
     Raises:
         FileNotFoundError: If the file doesn't exist
@@ -36,18 +57,156 @@ def load_layout_from_h5(h5_filename: str) -> Tuple[np.ndarray, float]:
                 raise ValueError("Missing 'layout' dataset in HDF5 file")
             layout = np.array(f["layout"])
 
+            # Validate cell types
+            valid_cells = {0, 1, -1, 2}  # navigable, POI, obstacle, shelf
+            unique_cells = set(np.unique(layout))
+            invalid_cells = unique_cells - valid_cells
+            if invalid_cells:
+                raise ValueError(
+                    f"Invalid cell types found: {invalid_cells}. Valid types: {valid_cells}"
+                )
+
             # Load edge length parameter
             if "edge_length" not in f:
                 raise ValueError("Missing 'edge_length' dataset in HDF5 file")
             edge_length = float(f["edge_length"][()])
 
+            # Load zones (optional)
+            zones = {}
+            if "zones" in f:
+                zones_group = f["zones"]
+                for zone_id in zones_group.keys():
+                    zone_group = zones_group[zone_id]
+                    if "name" in zone_group and "points" in zone_group:
+                        name = (
+                            zone_group["name"][()].decode("utf-8")
+                            if isinstance(zone_group["name"][()], bytes)
+                            else str(zone_group["name"][()])
+                        )
+                        points = zone_group["points"][:].tolist()
+                        zones[zone_id] = Zone(name, points)
+                    else:
+                        logger.warning(
+                            f"Zone {zone_id} missing required data, skipping"
+                        )
+
             logger.info(
-                f"Loaded layout with shape {layout.shape}, edge_length={edge_length}cm"
+                f"Loaded layout with shape {layout.shape}, edge_length={edge_length}cm, "
+                f"zones={len(zones)}, cell_types={sorted(unique_cells)}"
             )
-            return layout, edge_length
+            return layout, edge_length, zones
 
     except Exception as e:
         raise ValueError(f"Error reading HDF5 file {h5_filename}: {str(e)}")
+
+
+def save_layout_to_h5(
+    h5_filename: str,
+    layout: np.ndarray,
+    edge_length: float,
+    zones: Dict[str, Zone] = None,
+    layout_hash: str = None,
+) -> None:
+    """
+    Save store layout, edge length, and zones to HDF5 file.
+
+    Args:
+        h5_filename: Path to the .h5 file
+        layout: Layout array with cell types (0=navigable, 1=POI, -1=obstacle, 2=shelf)
+        edge_length: Size of one grid cell in centimeters
+        zones: Dictionary of zones {zone_id: Zone}
+        layout_hash: Optional hash for integrity verification
+    """
+    try:
+        with h5py.File(h5_filename, "w") as f:
+            # Save layout array
+            f.create_dataset("layout", data=layout, compression="gzip")
+
+            # Save edge length
+            f.create_dataset("edge_length", data=edge_length)
+
+            # Save layout hash if provided
+            if layout_hash:
+                f.create_dataset("layout_hash", data=layout_hash.encode("utf-8"))
+
+            # Save zones if provided
+            if zones:
+                zones_group = f.create_group("zones")
+                for zone_id, zone in zones.items():
+                    zone_group = zones_group.create_group(zone_id)
+                    zone_group.create_dataset("name", data=zone.name.encode("utf-8"))
+                    zone_group.create_dataset("points", data=np.array(zone.points))
+
+            logger.info(
+                f"Saved layout to {h5_filename} with {len(zones) if zones else 0} zones"
+            )
+
+    except Exception as e:
+        raise ValueError(f"Error saving HDF5 file {h5_filename}: {str(e)}")
+
+
+def get_cell_type_info() -> Dict[int, Dict[str, Any]]:
+    """
+    Get information about supported cell types.
+
+    Returns:
+        Dictionary mapping cell values to their properties
+    """
+    return {
+        0: {
+            "name": "navigable",
+            "walkable": True,
+            "color": "white",
+            "description": "Free zone",
+        },
+        1: {
+            "name": "poi",
+            "walkable": True,
+            "color": "green",
+            "description": "Point of Interest",
+        },
+        -1: {
+            "name": "obstacle",
+            "walkable": False,
+            "color": "black",
+            "description": "Obstacle",
+        },
+        2: {
+            "name": "shelf",
+            "walkable": False,
+            "color": "brown",
+            "description": "Shelf (non-navigable)",
+        },
+    }
+
+
+def is_valid_cell_type(cell_value: int) -> bool:
+    """
+    Check if a cell value is a valid cell type.
+
+    Args:
+        cell_value: Cell value from the layout array
+
+    Returns:
+        True if cell type is valid, False otherwise
+    """
+    valid_types = get_cell_type_info().keys()
+    return cell_value in valid_types
+
+
+def is_cell_navigable(cell_value: int) -> bool:
+    """
+    Check if a cell value represents a navigable cell.
+
+    Args:
+        cell_value: Cell value from the layout array
+
+    Returns:
+        True if cell is navigable, False otherwise
+    """
+    # Only 0 (navigable) and 1 (POI) are walkable
+    # -1 (obstacle) and 2 (shelf) are non-navigable
+    return cell_value >= 0
 
 
 def save_hash_to_json(hash_value: str, json_filename: str) -> None:

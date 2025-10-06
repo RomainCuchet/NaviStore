@@ -34,6 +34,11 @@ try:
         PathfindingSolver,
         PathfindingSolverFactory,
     )
+    from api_navimall.path_optimization.utils import (
+        load_layout_from_h5,
+        save_layout_to_h5,
+        Zone,
+    )
 
     PATHFINDING_AVAILABLE = True
 except ImportError as e:
@@ -45,6 +50,8 @@ COLORS = {
     "navigable": (255, 255, 255),  # White - free zone (0)
     "poi": (0, 255, 0),  # Green - point of interest (1)
     "obstacle": (0, 0, 0),  # Black - obstacle (-1)
+    "shelf": (139, 69, 19),  # Brown - shelf (2)
+    "zone": (255, 255, 0, 80),  # Semi-transparent yellow - zones
     "grid_line": (128, 128, 128),  # Gray - grid lines
     "background": (200, 200, 200),  # Light gray - background
     "ui_bg": (240, 240, 240),  # Very light gray - interface
@@ -109,6 +116,7 @@ class GridEditor:
         self.grid = np.zeros((self.grid_height, self.grid_width), dtype=int)
         self.original_grid = None
         self.has_changes = False
+        self.zones = []  # List of Zone objects for polygon overlays
 
         # View offset
         self.offset_x = 50
@@ -116,8 +124,10 @@ class GridEditor:
 
         # Interface state
         self.running = True
-        self.current_tool = 0  # 0=navigable, -1=obstacle, 1=POI
+        self.current_tool = 0  # 0=navigable, -1=obstacle, 1=POI, 2=shelf
         self.mouse_pressed = False
+        self.tool_names = {0: "Zone libre", -1: "Obstacle", 1: "POI", 2: "Étagère"}
+        self.tool_colors = {0: "blanc", -1: "noir", 1: "vert", 2: "marron"}
 
         # Mode coordonnées
         self.coordinate_mode = False
@@ -137,13 +147,15 @@ class GridEditor:
         self.buttons = self._create_buttons()
 
         # Statistics
-        self.stats = {"navigable": 0, "obstacles": 0, "pois": 0}
+        self.stats = {"navigable": 0, "obstacles": 0, "pois": 0, "shelves": 0}
 
         print("Store Layout Grid Editor initialized")
         print("Controls:")
-        print("  Left click: Free zone (white)")
+        print("  Left click: Use current tool")
         print("  Right click: Obstacle (black)")
         print("  Middle click: POI (green)")
+        print("  1-4: Select tool (navigable/obstacle/POI/shelf)")
+        print("  Tab: Cycle tools")
         print("  S: Save")
         print("  R: Reset")
         print("  ESC: Quit")
@@ -186,6 +198,7 @@ class GridEditor:
             "navigable": int(stats_dict.get(0, 0)),
             "obstacles": int(stats_dict.get(-1, 0)),
             "pois": int(stats_dict.get(1, 0)),
+            "shelves": int(stats_dict.get(2, 0)),
         }
 
     def _calculate_layout_hash(self) -> str:
@@ -242,11 +255,16 @@ class GridEditor:
                     color = COLORS["navigable"]
                 elif cell_value == 1:
                     color = COLORS["poi"]
+                elif cell_value == 2:
+                    color = COLORS["shelf"]
                 else:  # -1
                     color = COLORS["obstacle"]
 
                 pygame.draw.rect(self.screen, color, cell_rect)
                 pygame.draw.rect(self.screen, COLORS["grid_line"], cell_rect, 1)
+
+        # Draw zones if any
+        self._draw_zones()
 
         # Draw pathfinding elements if active
         if self.pathfinding_mode:
@@ -313,6 +331,44 @@ class GridEditor:
                 text_rect = text.get_rect(center=goal_rect.center)
                 self.screen.blit(text, text_rect)
 
+    def _draw_zones(self):
+        """Draw polygon zones as semi-transparent overlays."""
+        if not self.zones:
+            return
+
+        # Create a surface for alpha blending
+        if hasattr(pygame, "SRCALPHA"):
+            zone_surface = pygame.Surface(
+                (self.screen_width, self.screen_height), pygame.SRCALPHA
+            )
+        else:
+            zone_surface = pygame.Surface((self.screen_width, self.screen_height))
+            zone_surface.set_alpha(80)
+
+        for zone in self.zones:
+            if len(zone.points) < 3:  # Need at least 3 points for a polygon
+                continue
+
+            # Convert real-world coordinates to screen coordinates
+            screen_points = []
+            for x, y in zone.points:
+                # Convert real-world coords to grid coords
+                grid_x = int(x / self.edge_length)
+                grid_y = int(y / self.edge_length)
+                # Convert grid coords to screen coords
+                screen_x = self.offset_x + grid_y * self.cell_size
+                screen_y = self.offset_y + grid_x * self.cell_size
+                screen_points.append((screen_x, screen_y))
+
+            if len(screen_points) >= 3:
+                # Draw filled polygon
+                pygame.draw.polygon(zone_surface, COLORS["zone"][:3], screen_points)
+                # Draw polygon outline
+                pygame.draw.polygon(zone_surface, (255, 255, 0), screen_points, 2)
+
+        # Blit the zone surface onto the main screen
+        self.screen.blit(zone_surface, (0, 0))
+
     def _draw_ui(self):
         """Draw the user interface."""
         # Calculate info panel position
@@ -373,6 +429,7 @@ class GridEditor:
             f"Zones libres: {self.stats['navigable']} ({self.stats['navigable']/total_cells*100:.1f}%)",
             f"Obstacles: {self.stats['obstacles']} ({self.stats['obstacles']/total_cells*100:.1f}%)",
             f"Points d'intérêt: {self.stats['pois']} ({self.stats['pois']/total_cells*100:.1f}%)",
+            f"Étagères: {self.stats['shelves']} ({self.stats['shelves']/total_cells*100:.1f}%)",
         ]
 
         for text in stats_info:
@@ -389,10 +446,12 @@ class GridEditor:
         y_offset += section_spacing
 
         tools_info = [
-            "🖱️ Clic gauche: Zone libre (blanc)",
+            "🖱️ Clic gauche: Outil actuel",
             "🖱️ Clic droit: Obstacle (noir)",
             "🖱️ Clic milieu: Point d'intérêt (vert)",
             "🖱️ Glisser: Dessiner en continu",
+            "",
+            f"🔧 Outil actuel: {self.tool_names[self.current_tool]} ({self.tool_colors[self.current_tool]})",
         ]
 
         for text in tools_info:
@@ -415,6 +474,8 @@ class GridEditor:
             "⌨️ ESC: Quitter l'éditeur",
             "⌨️ Ctrl+N: Nouvelle grille",
             "⌨️ Ctrl+O: Ouvrir fichier",
+            "⌨️ 1-4: Sélectionner outil",
+            "⌨️ Tab: Outil suivant",
         ]
 
         for text in shortcuts_info:
@@ -432,6 +493,7 @@ class GridEditor:
             ("Zone libre (navigable)", COLORS["navigable"], "0"),
             ("Obstacle (mur/rayon)", COLORS["obstacle"], "-1"),
             ("Point d'intérêt", COLORS["poi"], "1"),
+            ("Étagère", COLORS["shelf"], "2"),
         ]
 
         for i, (label, color, value) in enumerate(legend_items):
@@ -467,7 +529,7 @@ class GridEditor:
                 world_x, world_y = self.last_clicked_coords
                 cell_value = self.grid[x, y]
 
-                value_names = {0: "libre", 1: "POI", -1: "obstacle"}
+                value_names = {0: "libre", 1: "POI", -1: "obstacle", 2: "étagère"}
                 value_name = value_names.get(cell_value, "inconnu")
 
                 coord_info.extend(
@@ -719,9 +781,9 @@ class GridEditor:
 
             # Normal edit mode (if not pathfinding nor coordinates)
             if not self.pathfinding_mode and not self.coordinate_mode:
-                # Determine value by button
-                if button == 1:  # Left click - free zone
-                    new_value = 0
+                # Determine value by button or use current tool
+                if button == 1:  # Left click - use current tool
+                    new_value = self.current_tool
                 elif button == 3:  # Right click - obstacle
                     new_value = -1
                 elif button == 2:  # Middle click - POI
@@ -828,11 +890,19 @@ class GridEditor:
             )
 
             if file_path:
-                with h5py.File(file_path, "r") as f:
-                    layout = np.array(f["layout"])
-                    edge_length = float(f["edge_length"][()])
+                if PATHFINDING_AVAILABLE:
+                    # Use enhanced loading function with zone support
+                    layout, edge_length, zones_dict = load_layout_from_h5(file_path)
+                    self.zones = list(zones_dict.values())
+                else:
+                    # Fallback to basic loading
+                    with h5py.File(file_path, "r") as f:
+                        layout = np.array(f["layout"])
+                        edge_length = float(f["edge_length"][()])
+                    self.zones = []
 
-                    # Get stored hash if it exists
+                # Get stored hash for verification
+                with h5py.File(file_path, "r") as f:
                     stored_hash = f.attrs.get("layout_hash", "Non disponible")
 
                 self.grid = layout
@@ -906,13 +976,28 @@ class GridEditor:
                     ):
                         return
 
-                with h5py.File(file_path, "w") as f:
-                    f.create_dataset("layout", data=self.grid)
-                    f.create_dataset("edge_length", data=self.edge_length)
+                if PATHFINDING_AVAILABLE:
+                    # Use enhanced saving function with zone support
+                    zones_dict = {
+                        f"zone_{i}": zone for i, zone in enumerate(self.zones)
+                    }
+                    save_layout_to_h5(
+                        file_path, self.grid, self.edge_length, zones_dict
+                    )
 
-                    # Add hash as attribute for verification
-                    f.attrs["layout_hash"] = layout_hash
-                    f.attrs["created_with"] = "NaviStore Grid Editor"
+                    # Add additional attributes
+                    with h5py.File(file_path, "a") as f:
+                        f.attrs["layout_hash"] = layout_hash
+                        f.attrs["created_with"] = "NaviStore Grid Editor"
+                else:
+                    # Fallback to basic saving
+                    with h5py.File(file_path, "w") as f:
+                        f.create_dataset("layout", data=self.grid)
+                        f.create_dataset("edge_length", data=self.edge_length)
+
+                        # Add hash as attribute for verification
+                        f.attrs["layout_hash"] = layout_hash
+                        f.attrs["created_with"] = "NaviStore Grid Editor"
 
                 self.original_grid = self.grid.copy()
                 self.has_changes = False
@@ -1277,6 +1362,35 @@ class GridEditor:
         elif key == pygame.K_SPACE and self.pathfinding_mode:
             # Spacebar to restart pathfinding
             self._reset_pathfinding()
+        elif key == pygame.K_1:
+            self.current_tool = 0  # Navigable
+            print(
+                f"🔧 Outil sélectionné: {self.tool_names[self.current_tool]} ({self.tool_colors[self.current_tool]})"
+            )
+        elif key == pygame.K_2:
+            self.current_tool = -1  # Obstacle
+            print(
+                f"🔧 Outil sélectionné: {self.tool_names[self.current_tool]} ({self.tool_colors[self.current_tool]})"
+            )
+        elif key == pygame.K_3:
+            self.current_tool = 1  # POI
+            print(
+                f"🔧 Outil sélectionné: {self.tool_names[self.current_tool]} ({self.tool_colors[self.current_tool]})"
+            )
+        elif key == pygame.K_4:
+            self.current_tool = 2  # Shelf
+            print(
+                f"🔧 Outil sélectionné: {self.tool_names[self.current_tool]} ({self.tool_colors[self.current_tool]})"
+            )
+        elif key == pygame.K_TAB:
+            # Cycle through tools
+            tools = [0, -1, 1, 2]
+            current_index = tools.index(self.current_tool)
+            next_index = (current_index + 1) % len(tools)
+            self.current_tool = tools[next_index]
+            print(
+                f"🔧 Outil sélectionné: {self.tool_names[self.current_tool]} ({self.tool_colors[self.current_tool]})"
+            )
 
     def _show_help(self):
         """Display help."""
@@ -1287,10 +1401,17 @@ class GridEditor:
     NaviStore Grid Editor - Help
 
     DRAWING TOOLS:
-    • Left click: Free zone (navigable) - value 0
-    • Right click: Obstacle (wall, shelf) - value -1  
+    • Left click: Use current tool (see tool selection)
+    • Right click: Obstacle (wall) - value -1  
     • Middle click: Point of interest (POI) - value 1
     • Drag: Draw continuously
+
+    TOOL SELECTION:
+    • 1: Zone libre (navigable) - value 0 - white
+    • 2: Obstacle (wall) - value -1 - black
+    • 3: Point of interest (POI) - value 1 - green
+    • 4: Étagère (shelf) - value 2 - brown
+    • Tab: Cycle through tools
 
     KEYBOARD SHORTCUTS:
     • S: Save grid

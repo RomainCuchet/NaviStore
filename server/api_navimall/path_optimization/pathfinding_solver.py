@@ -1,5 +1,14 @@
 """
-Pathfinding Solver utilisant la librairie pathfinding.
+Pathfinding Solver utilisant la librai        \"\"\"
+        Initialize pathfinding solver.
+
+        Args:
+            grid_with_poi: Grid with POIs marked (0=navigable, 1=POI, -1=obstacle, 2=shelf)
+            distance_threshold_grid: Distance threshold in grid units
+            poi_coords: POI coordinates in grid space
+            algorithm: Algorithm to use ('astar', 'dijkstra', 'best_first')
+            diagonal_movement: Allow diagonal movements
+        \"\"\""nding.
 
 Alternative robuste et fiable à JPS pour le pathfinding dans les layouts de magasin.
 Utilise les algorithmes A*, Dijkstra, et autres algorithmes éprouvés.
@@ -113,7 +122,11 @@ class PathfindingSolver:
 
             # Create a new grid for each search (clone() method doesn't exist)
             # Recreate grid with same data
-            walkable_matrix = (self.grid_array >= 0).astype(int)
+            # Only cells with values 0 (navigable) and 1 (POI) are walkable
+            # Cells with values -1 (obstacle) and 2 (shelf) are non-walkable
+            walkable_matrix = ((self.grid_array == 0) | (self.grid_array == 1)).astype(
+                int
+            )
             grid = Grid(matrix=walkable_matrix)
 
             # Get start and goal nodes

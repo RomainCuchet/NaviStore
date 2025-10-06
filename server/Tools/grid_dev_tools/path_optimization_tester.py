@@ -22,6 +22,7 @@ COLORS = {
     "navigable": (255, 255, 255),  # Blanc - zone libre
     "poi": (255, 0, 0),  # Rouge - POI
     "obstacle": (0, 0, 0),  # Noir - obstacle
+    "shelf": (139, 69, 19),  # Brown - shelf
     "path": (0, 255, 0),  # Vert - chemin optimal
     "path_highlight": (0, 200, 0),  # Vert foncé - chemin surligné
     "grid_line": (200, 200, 200),  # Gris - lignes de grille
@@ -368,6 +369,8 @@ class PathOptimizationTester:
                 # Couleur de base selon le type de cellule
                 if self.layout[y, x] == -1:  # matrix[row, col]
                     color = COLORS["obstacle"]
+                elif self.layout[y, x] == 2:  # shelf
+                    color = COLORS["shelf"]
                 else:
                     color = COLORS["navigable"]
 
