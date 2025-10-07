@@ -10,6 +10,13 @@ Refactored Store Layout Grid Editor
 Notes:
 - This is still a single-file implementation for clarity, but UI drawing and application logic have been separated into distinct methods
 - The Pygame-based "menu bar" is custom-drawn (there is no native OS menu integration)
+- Added viewport (camera) support so large grids always fit into the window: zoom, pan and auto-fit behaviour.
+
+Controls (new):
+- Mouse wheel: zoom in/out centered on mouse
+- Middle mouse button drag: pan the view
+- Arrow keys: pan (left/right/up/down)
+- +/-: zoom in/out (keyboard)
 
 """
 
@@ -68,12 +75,16 @@ COLORS = {
 DEFAULT_GRID_SIZE = (20, 15)
 DEFAULT_CELL_SIZE = 25
 DEFAULT_EDGE_LENGTH = 100.0  # cm
-MIN_CELL_SIZE = 10
-MAX_CELL_SIZE = 50
+MIN_CELL_SIZE = 6
+MAX_CELL_SIZE = 120
 
 
 class GridEditor:
-    """Refactored Grid Editor with menu bar and side palette."""
+    """Refactored Grid Editor with menu bar, side palette and camera (viewport).
+
+    The editor now adapts display so a grid of any size can be viewed: it auto-fits
+    on creation/load, and supports zoom + pan interactions.
+    """
 
     def __init__(self):
         pygame.init()
@@ -91,6 +102,7 @@ class GridEditor:
         self.top_menu_height = 28
         self.min_window_width = 900
         self.min_window_height = 650
+        self.window_margin = 16
 
         # Compute sizes
         grid_display_width = self.grid_width * self.cell_size
@@ -120,9 +132,14 @@ class GridEditor:
         self.has_changes = False
         self.zones = []
 
-        # View offsets
+        # Viewport / camera state
+        # offset is pixel position of the grid's top-left on screen
         self.offset_x = 100
         self.offset_y = self.top_menu_height + 20
+        self.min_offset_x = -1e6
+        self.min_offset_y = -1e6
+        self.max_offset_x = 1e6
+        self.max_offset_y = 1e6
 
         # Interaction state
         self.running = True
@@ -131,6 +148,11 @@ class GridEditor:
 
         # Dragging state: which tool is currently being applied while mouse held
         self.drag_tool: Optional[int] = None
+
+        # Panning (middle mouse)
+        self.panning = False
+        self.pan_start_mouse = (0, 0)
+        self.pan_start_offset = (0, 0)
 
         # Modes
         self.coordinate_mode = False
@@ -153,15 +175,15 @@ class GridEditor:
         # Dropdown definitions: each is list of (label, callback, shortcut)
         self.dropdowns = {
             "Fichier": [
-                ("Nouveau \t Ctrl+N", self._new_grid, (pygame.K_n, True)),
-                ("Ouvrir \t Ctrl+O", self._load_grid, (pygame.K_o, True)),
-                ("Sauver \t Ctrl+S", self._save_grid, (pygame.K_s, True)),
+                ("Nouveau 	 Ctrl+N", self._new_grid, (pygame.K_n, True)),
+                ("Ouvrir 	 Ctrl+O", self._load_grid, (pygame.K_o, True)),
+                ("Sauver 	 Ctrl+S", self._save_grid, (pygame.K_s, True)),
                 ("Reset", self._reset_grid, None),
                 ("Taille...", self._resize_grid, None),
                 ("—", None, None),
                 ("Infos (afficher/masquer)", self._toggle_infos, None),
                 ("Aide", self._show_help, None),
-                ("Quitter \t Ctrl+Q", self._quit_editor, (pygame.K_q, True)),
+                ("Quitter 	 Ctrl+Q", self._quit_editor, (pygame.K_q, True)),
             ],
             "Mode": [
                 ("Coordonnées", self._activate_coordinate_mode, None),
@@ -184,10 +206,13 @@ class GridEditor:
         self.buttons = []
 
         # Misc prints
-        print("NaviStore Grid Editor (refactored) initialized")
+        print("NaviStore Grid Editor (refactored + viewport) initialized")
 
         # Initial stats
         self._update_stats()
+
+        # Fit the grid initially
+        self._fit_grid_to_view()
 
     # ------------------------- Model utilities -------------------------
     def _update_stats(self):
@@ -215,6 +240,63 @@ class GridEditor:
         world_y = (grid_y + 0.5) * self.edge_length
         return world_x, world_y
 
+    # ------------------------- Viewport / camera helpers -------------------------
+    def _get_available_grid_area(self) -> Tuple[int, int, int, int]:
+        """Return (x, y, w, h) available area for the grid (not including info panel and mode area)."""
+        x = self.window_margin + 80  # leave extra left margin for palette
+        y = self.top_menu_height + self.window_margin
+        w = max(
+            200, self.screen_width - x - self.ui_panel_width - self.window_margin - 20
+        )
+        h = max(
+            200, self.screen_height - y - self.mode_info_height - self.window_margin
+        )
+        return int(x), int(y), int(w), int(h)
+
+    def _fit_grid_to_view(self):
+        """Adjust cell_size and offsets so that the whole grid fits into available area.
+
+        This is called on load/new/resize and window resize.
+        """
+        x, y, w, h = self._get_available_grid_area()
+        # Compute ideal cell size to fit both dimensions
+        if self.grid_width > 0 and self.grid_height > 0:
+            cell_x = w / self.grid_width
+            cell_y = h / self.grid_height
+            ideal = int(min(cell_x, cell_y))
+            # Clamp ideal
+            ideal = max(MIN_CELL_SIZE, min(MAX_CELL_SIZE, ideal))
+            self.cell_size = ideal
+        # Center grid within available area
+        grid_w = self.grid_width * self.cell_size
+        grid_h = self.grid_height * self.cell_size
+        if grid_w <= w:
+            self.offset_x = x + (w - grid_w) // 2
+            self.max_offset_x = self.offset_x
+            self.min_offset_x = self.offset_x
+        else:
+            # allow panning horizontally
+            self.offset_x = x
+            self.min_offset_x = x - (grid_w - w)
+            self.max_offset_x = x
+
+        if grid_h <= h:
+            self.offset_y = y + (h - grid_h) // 2
+            self.max_offset_y = self.offset_y
+            self.min_offset_y = self.offset_y
+        else:
+            self.offset_y = y
+            self.min_offset_y = y - (grid_h - h)
+            self.max_offset_y = y
+
+    def _clamp_offsets(self):
+        self.offset_x = max(
+            int(self.min_offset_x), min(int(self.max_offset_x), int(self.offset_x))
+        )
+        self.offset_y = max(
+            int(self.min_offset_y), min(int(self.max_offset_y), int(self.offset_y))
+        )
+
     # ------------------------- File operations (unchanged logic) -------------------------
     def _new_grid(self):
         if self.has_changes:
@@ -231,7 +313,7 @@ class GridEditor:
                 "Largeur:",
                 initialvalue=self.grid_width,
                 minvalue=5,
-                maxvalue=200,
+                maxvalue=500,
             )
             if width is None:
                 return
@@ -240,7 +322,7 @@ class GridEditor:
                 "Hauteur:",
                 initialvalue=self.grid_height,
                 minvalue=5,
-                maxvalue=200,
+                maxvalue=500,
             )
             if height is None:
                 return
@@ -258,8 +340,8 @@ class GridEditor:
             self.grid = np.zeros((self.grid_height, self.grid_width), dtype=int)
             self.original_grid = None
             self.has_changes = False
-            self._adjust_window_size()
             self._update_stats()
+            self._fit_grid_to_view()
         finally:
             root.destroy()
 
@@ -288,24 +370,24 @@ class GridEditor:
                 self.zones = []
             with h5py.File(file_path, "r") as f:
                 stored_hash = f.attrs.get("layout_hash", "Non disponible")
-            self.grid = layout
-            self.grid_height, self.grid_width = layout.shape
-            self.edge_length = edge_length
-            self.original_grid = layout.copy()
-            self.has_changes = False
-            self._update_stats()
-            current_hash = self._calculate_layout_hash()
-            filename = os.path.basename(file_path)
-            info_message = f"Grille chargée: {self.grid_width}x{self.grid_height}\nFichier: {filename}\nHash XXH3: {current_hash}\n"
-            if stored_hash != "Non disponible":
-                if stored_hash == current_hash:
-                    info_message += "✓ Intégrité vérifiée"
+                self.grid = layout
+                self.grid_height, self.grid_width = layout.shape
+                self.edge_length = edge_length
+                self.original_grid = layout.copy()
+                self.has_changes = False
+                self._update_stats()
+                current_hash = self._calculate_layout_hash()
+                filename = os.path.basename(file_path)
+                info_message = f"Grille chargée: {self.grid_width}x{self.grid_height}\nFichier: {filename}\nHash XXH3: {current_hash}\n"
+                if stored_hash != "Non disponible":
+                    if stored_hash == current_hash:
+                        info_message += "✓ Intégrité vérifiée"
+                    else:
+                        info_message += f"⚠ Hash différent du stocké: {stored_hash}"
                 else:
-                    info_message += f"⚠ Hash différent du stocké: {stored_hash}"
-            else:
-                info_message += "ℹ Pas de hash stocké (fichier ancien)"
-            messagebox.showinfo("Succès", info_message)
-            self._adjust_window_size()
+                    info_message += "ℹ Pas de hash stocké (fichier ancien)"
+                    messagebox.showinfo("Succès", info_message)
+                    self._fit_grid_to_view()
         finally:
             root.destroy()
 
@@ -323,7 +405,7 @@ class GridEditor:
             if os.path.exists(file_path):
                 if not messagebox.askyesno(
                     "Fichier existant",
-                    f"Le fichier {layout_hash}.h5 existe déjà.\nVoulez-vous l'écraser?",
+                    f"Le fichier {layout_hash}.h5 existe déjà. Voulez-vous l'écraser?",
                 ):
                     return
             if PATHFINDING_AVAILABLE:
@@ -354,7 +436,7 @@ class GridEditor:
                 json.dump(metadata, f, indent=2)
             messagebox.showinfo(
                 "Succès",
-                f"Grille sauvegardée:\nNom: {layout_hash}.h5\nChemin: {file_path}",
+                f"Grille sauvegardée: Nom: {layout_hash}.h5 Chemin: {file_path}",
             )
         finally:
             root.destroy()
@@ -380,7 +462,7 @@ class GridEditor:
                 "Nouvelle largeur:",
                 initialvalue=self.grid_width,
                 minvalue=5,
-                maxvalue=200,
+                maxvalue=500,
             )
             if width is None:
                 return
@@ -389,7 +471,7 @@ class GridEditor:
                 "Nouvelle hauteur:",
                 initialvalue=self.grid_height,
                 minvalue=5,
-                maxvalue=200,
+                maxvalue=500,
             )
             if height is None:
                 return
@@ -401,7 +483,7 @@ class GridEditor:
             self.grid_width, self.grid_height = width, height
             self.has_changes = True
             self._update_stats()
-            self._adjust_window_size()
+            self._fit_grid_to_view()
         finally:
             root.destroy()
 
@@ -514,14 +596,14 @@ class GridEditor:
             )
             x += txt_rect.width + 22
 
-        # Draw dropdown if open
+        # Draw dropdown if open (on top of UI so it stays visible)
         if self.open_dropdown:
             items = self.dropdowns[self.open_dropdown]
             area_x = getattr(self, f"menu_area_{self.open_dropdown}").x
             area_y = self.top_menu_height
             # Build dropdown rect
             item_h = 22
-            width = 260
+            width = 300
             height = item_h * len(items)
             dropdown_rect = pygame.Rect(area_x, area_y, width, height)
             pygame.draw.rect(self.screen, COLORS["ui_bg"], dropdown_rect)
@@ -546,11 +628,14 @@ class GridEditor:
 
         # If a dropdown menu is open, push the palette below the dropdown area
         if self.open_dropdown:
-            # approximate dropdown item height & total height
             items = self.dropdowns.get(self.open_dropdown, [])
             item_h = 22
             dropdown_height = item_h * max(1, len(items))
             palette_y = self.top_menu_height + dropdown_height + 12
+
+        # Also ensure palette doesn't overlap the top of the info panel area
+        _, info_top_y, _, _ = self._get_available_grid_area()
+        palette_y = max(palette_y, self.top_menu_height + 8, info_top_y)
 
         for i, (label, color, val) in enumerate(self.palette):
             rect = pygame.Rect(
@@ -568,13 +653,13 @@ class GridEditor:
             self.screen.blit(label_surf, (rect.right + 8, rect.y + 6))
 
     def _draw_grid(self):
-        grid_rect = pygame.Rect(
-            self.offset_x,
-            self.offset_y,
-            self.grid_width * self.cell_size,
-            self.grid_height * self.cell_size,
-        )
+        # Grid background (only in the available area)
+        grid_w = self.grid_width * self.cell_size
+        grid_h = self.grid_height * self.cell_size
+        grid_rect = pygame.Rect(self.offset_x, self.offset_y, grid_w, grid_h)
         pygame.draw.rect(self.screen, COLORS["background"], grid_rect)
+
+        # Draw cells
         for y in range(self.grid_height):
             for x in range(self.grid_width):
                 cell_rect = pygame.Rect(
@@ -583,6 +668,14 @@ class GridEditor:
                     self.cell_size,
                     self.cell_size,
                 )
+                # Only draw if visible (optimization)
+                if (
+                    cell_rect.right < 0
+                    or cell_rect.left > self.screen_width
+                    or cell_rect.bottom < 0
+                    or cell_rect.top > self.screen_height
+                ):
+                    continue
                 cell_value = self.grid[y, x]
                 if cell_value == 0:
                     color = COLORS["navigable"]
@@ -665,10 +758,15 @@ class GridEditor:
             return
         # Place the Info panel to the right of the grid, but ensure its top is below the menu bar
         info_x = self.offset_x + self.grid_width * self.cell_size + 20
+        # Ensure info panel is within screen and not overlapping menu
         info_y = self.top_menu_height + 8
         info_width = self.ui_panel_width
         # Height limited by available vertical space under the menu
         info_height = min(self.screen_height - info_y - 40, 800)
+        # If info panel would go off screen on the right, clamp to screen right
+        if info_x + info_width + 8 > self.screen_width:
+            info_x = self.screen_width - info_width - 8
+            info_x = max(info_x, 8)
         info_rect = pygame.Rect(info_x, info_y, info_width, info_height)
         pygame.draw.rect(self.screen, COLORS["ui_bg"], info_rect)
         pygame.draw.rect(self.screen, COLORS["grid_line"], info_rect, 1)
@@ -697,7 +795,7 @@ class GridEditor:
             s = self.small_font.render(line, True, COLORS["text"])
             self.screen.blit(s, (info_rect.x + 10, y))
             y += 18
-        # Legend boxes (placed in a new area inside the info panel)
+        # Legend boxes (placed vertically to avoid horizontal overflow)
         legend_y = y + 6
         legend_items = [
             ("Libre", COLORS["navigable"], 0),
@@ -705,7 +803,6 @@ class GridEditor:
             ("POI", COLORS["poi"], 1),
             ("Étagère", COLORS["shelf"], 2),
         ]
-        # Draw legend vertically to avoid horizontal overflow
         ly = legend_y
         for label, color, val in legend_items:
             r = pygame.Rect(info_rect.x + 10, ly, 18, 18)
@@ -717,7 +814,7 @@ class GridEditor:
 
     def _draw_mode_info_area(self):
         # Dedicated area under main grid for active mode information
-        area_x = self.offset_x
+        area_x = max(8, self.offset_x)
         area_y = self.offset_y + self.grid_height * self.cell_size + 10
         area_w = min(
             self.grid_width * self.cell_size, self.screen_width - self.offset_x - 40
@@ -812,7 +909,7 @@ class GridEditor:
             area_x = getattr(self, f"menu_area_{self.open_dropdown}").x
             area_y = self.top_menu_height
             item_h = 22
-            width = 260
+            width = 300
             for i, (label, callback, _) in enumerate(items):
                 item_rect = pygame.Rect(area_x, area_y + i * item_h, width, item_h)
                 if item_rect.collidepoint(pos):
@@ -839,6 +936,13 @@ class GridEditor:
             return
         # Palette click handling
         if self._handle_palette_click(pos):
+            return
+        # Panning start (middle button)
+        if button == 2:
+            # Start panning
+            self.panning = True
+            self.pan_start_mouse = pos
+            self.pan_start_offset = (self.offset_x, self.offset_y)
             return
         # Buttons area (legacy) - currently empty
         for ui_button in self.buttons:
@@ -886,9 +990,6 @@ class GridEditor:
                 elif button == 3:  # right click uses side_selected_tool
                     new_value = self.side_selected_tool
                     self.drag_tool = new_value
-                elif button == 2:
-                    new_value = 1
-                    self.drag_tool = new_value
                 else:
                     return
                 if self.grid[x, y] != new_value:
@@ -897,6 +998,15 @@ class GridEditor:
                     self._update_stats()
 
     def _handle_mouse_drag(self, pos: Tuple[int, int]):
+        # Handle panning
+        if self.panning:
+            dx = pos[0] - self.pan_start_mouse[0]
+            dy = pos[1] - self.pan_start_mouse[1]
+            self.offset_x = self.pan_start_offset[0] + dx
+            self.offset_y = self.pan_start_offset[1] + dy
+            self._clamp_offsets()
+            return
+        # Drawing while dragging
         if self.drag_tool is None:
             return
         grid_pos = self._get_grid_pos(pos)
@@ -908,7 +1018,47 @@ class GridEditor:
                 self._update_stats()
 
     def _handle_mouse_up(self):
+        # End panning if active
+        if self.panning:
+            self.panning = False
         self.drag_tool = None
+
+    def _handle_mouse_wheel(self, event):
+        # pygame.MOUSEWHEEL: event.y (vertical wheel) positive = up
+        old_size = self.cell_size
+        # Zoom step: scale by 10% per wheel notch
+        factor = 1.15 if event.y > 0 else 1 / 1.15
+        new_size = int(max(MIN_CELL_SIZE, min(MAX_CELL_SIZE, round(old_size * factor))))
+        if new_size == old_size:
+            return
+        # Zoom centered on mouse position
+        mx, my = pygame.mouse.get_pos()
+        # Compute grid relative coords under mouse
+        rel_x = (mx - self.offset_x) / old_size
+        rel_y = (my - self.offset_y) / old_size
+        self.cell_size = new_size
+        # Compute new offsets so that the same grid cell remains under the cursor
+        self.offset_x = mx - rel_x * self.cell_size
+        self.offset_y = my - rel_y * self.cell_size
+        # After zoom, recompute pan bounds
+        self._fit_grid_pan_bounds()
+        self._clamp_offsets()
+
+    def _fit_grid_pan_bounds(self):
+        # Called when zoom / fit changes to recalc min/max offsets
+        x, y, w, h = self._get_available_grid_area()
+        grid_w = self.grid_width * self.cell_size
+        grid_h = self.grid_height * self.cell_size
+        if grid_w <= w:
+            self.min_offset_x = self.max_offset_x = x + (w - grid_w) // 2
+        else:
+            self.min_offset_x = x - (grid_w - w)
+            self.max_offset_x = x
+        if grid_h <= h:
+            self.min_offset_y = self.max_offset_y = y + (h - grid_h) // 2
+        else:
+            self.min_offset_y = y - (grid_h - h)
+            self.max_offset_y = y
 
     # ------------------------- Misc UI helpers -------------------------
     def _adjust_window_size(self):
@@ -925,6 +1075,8 @@ class GridEditor:
         self.screen = pygame.display.set_mode(
             (self.screen_width, self.screen_height), pygame.RESIZABLE
         )
+        # Recompute fit/bounds
+        self._fit_grid_to_view()
 
     def _show_about(self):
         root = tk.Tk()
@@ -932,7 +1084,7 @@ class GridEditor:
         try:
             messagebox.showinfo(
                 "À propos",
-                "NaviStore Grid Editor — Refactorisé\nUI moderne intégrée (Pygame)\nMaintient la logique existante.",
+                "NaviStore Grid Editor — Refactorisé UI moderne intégrée (Pygame) Maintient la logique existante.",
             )
         finally:
             root.destroy()
@@ -981,13 +1133,21 @@ class GridEditor:
                 self.pathfinding_mode = False
                 self._reset_pathfinding()
         elif key == pygame.K_PLUS or key == pygame.K_EQUALS:
-            if self.cell_size < MAX_CELL_SIZE:
-                self.cell_size += 2
-                self._adjust_window_size()
+            # zoom in keyboard-centered at screen center
+            class _Ev:
+                pass
+
+            ev = _Ev()
+            ev.y = 1
+            self._handle_mouse_wheel(ev)
         elif key == pygame.K_MINUS:
-            if self.cell_size > MIN_CELL_SIZE:
-                self.cell_size -= 2
-                self._adjust_window_size()
+
+            class _Ev:
+                pass
+
+            ev = _Ev()
+            ev.y = -1
+            self._handle_mouse_wheel(ev)
         elif key in (pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4):
             if key == pygame.K_1:
                 self.current_tool = 0
@@ -1003,6 +1163,18 @@ class GridEditor:
             current_index = tools.index(self.current_tool)
             self.current_tool = tools[(current_index + 1) % len(tools)]
             print(f"Outil courant: {self.current_tool}")
+        elif key == pygame.K_LEFT:
+            self.offset_x += 40
+            self._clamp_offsets()
+        elif key == pygame.K_RIGHT:
+            self.offset_x -= 40
+            self._clamp_offsets()
+        elif key == pygame.K_UP:
+            self.offset_y += 40
+            self._clamp_offsets()
+        elif key == pygame.K_DOWN:
+            self.offset_y -= 40
+            self._clamp_offsets()
 
     # ------------------------- Main loop -------------------------
     def run(self):
@@ -1018,6 +1190,8 @@ class GridEditor:
                     self._handle_mouse_up()
                 elif event.type == pygame.MOUSEMOTION:
                     self._handle_mouse_drag(event.pos)
+                elif event.type == pygame.MOUSEWHEEL:
+                    self._handle_mouse_wheel(event)
                 elif event.type == pygame.KEYDOWN:
                     self._handle_keyboard(event.key)
                 elif event.type == pygame.VIDEORESIZE:
@@ -1026,6 +1200,8 @@ class GridEditor:
                     self.screen = pygame.display.set_mode(
                         (self.screen_width, self.screen_height), pygame.RESIZABLE
                     )
+                    # refit grid area if screen changed
+                    self._fit_grid_to_view()
 
             # Rendering: draw base UI first, then draw menu on top so dropdowns are never occluded
             self.screen.fill(COLORS["background"])
