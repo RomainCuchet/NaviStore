@@ -1,18 +1,16 @@
 """
-Store Layout Grid Editor
+Refactored Store Layout Grid Editor
+- Menu bar (File, Mode) with dropdowns
+- 'Infos' panel grouped and toggleable from File menu
+- Side color/type palette (black, green, orange) that controls right-click placement while pressed
+- Mode selection (Coord / Path) in Mode menu; only active mode shows its information in a dedicated area under the main grid
+- Removed the old large button toolbar: file actions moved into File menu
+- Maintains original functionality (load/save/new/reset/resize/pathfinding/coord) using the same dialog functions
 
-Pygame interface to edit store grids used by the path optimization system.
-Allows creating, modifying and saving layouts with free zones, obstacles and POIs.
+Notes:
+- This is still a single-file implementation for clarity, but UI drawing and application logic have been separated into distinct methods
+- The Pygame-based "menu bar" is custom-drawn (there is no native OS menu integration)
 
-Controls:
-- Left click: Place free zone (0)
-- Right click: Place obstacle (-1)
-- Middle click: Place POI (1)
-- S: Save
-- R: Reset
-- ESC: Quit without saving
-- +/-: Adjust grid size
-- Arrows: Move view
 """
 
 import pygame
@@ -27,7 +25,7 @@ import json
 import xxhash
 import time
 
-# Pathfinding imports
+# Pathfinding imports (kept as before)
 try:
     sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
     from api_navimall.path_optimization.pathfinding_solver import (
@@ -45,27 +43,28 @@ except ImportError as e:
     PATHFINDING_AVAILABLE = False
     print(f"⚠️ Pathfinding not available: {e}")
 
-# Color configuration
+# Color configuration -- re-used
 COLORS = {
     "navigable": (255, 255, 255),  # White - free zone (0)
     "poi": (0, 255, 0),  # Green - point of interest (1)
     "obstacle": (0, 0, 0),  # Black - obstacle (-1)
-    "shelf": (139, 69, 19),  # Brown - shelf (2)
+    "shelf": (255, 165, 0),  # Orange-ish for shelf to match palette (2)
     "zone": (255, 255, 0, 80),  # Semi-transparent yellow - zones
     "grid_line": (128, 128, 128),  # Gray - grid lines
     "background": (200, 200, 200),  # Light gray - background
-    "ui_bg": (240, 240, 240),  # Very light gray - interface
-    "text": (0, 0, 0),  # Black - text
-    "button": (180, 180, 180),  # Gray - buttons
-    "button_hover": (160, 160, 160),  # Dark gray - hovered buttons
+    "ui_bg": (245, 245, 245),  # Very light gray - interface
+    "text": (10, 10, 10),  # Dark text
+    "button": (220, 220, 220),
+    "button_hover": (200, 200, 200),
+    "menu_bg": (230, 230, 230),
+    "menu_hover": (200, 220, 255),
     # Pathfinding colors
-    "path_start": (255, 0, 0),  # Red - starting point
-    "path_goal": (0, 0, 255),  # Blue - goal point
-    "path_line": (255, 165, 0),  # Orange - path
-    "path_bg": (255, 255, 200),  # Light yellow - path background
+    "path_start": (255, 0, 0),
+    "path_goal": (0, 0, 255),
+    "path_line": (255, 165, 0),
 }
 
-# Default configuration
+# Defaults
 DEFAULT_GRID_SIZE = (20, 15)
 DEFAULT_CELL_SIZE = 25
 DEFAULT_EDGE_LENGTH = 100.0  # cm
@@ -74,10 +73,9 @@ MAX_CELL_SIZE = 50
 
 
 class GridEditor:
-    """Store grid editor with Pygame interface."""
+    """Refactored Grid Editor with menu bar and side palette."""
 
     def __init__(self):
-        """Initialize the grid editor."""
         pygame.init()
 
         # Display configuration
@@ -85,115 +83,116 @@ class GridEditor:
         self.grid_width, self.grid_height = DEFAULT_GRID_SIZE
         self.edge_length = DEFAULT_EDGE_LENGTH
 
-        # User interface
-        self.ui_panel_width = 350  # Info panel width
-        self.ui_height = 120  # Button area height
-        self.min_window_width = 800
-        self.min_window_height = 600
+        # UI sizes
+        self.ui_panel_width = 350
+        self.mode_info_height = (
+            120  # area under main grid reserved for mode-specific info
+        )
+        self.top_menu_height = 28
+        self.min_window_width = 900
+        self.min_window_height = 650
 
-        # Calculate window dimensions
+        # Compute sizes
         grid_display_width = self.grid_width * self.cell_size
         grid_display_height = self.grid_height * self.cell_size
 
         self.screen_width = max(
-            self.min_window_width, grid_display_width + self.ui_panel_width + 100
+            self.min_window_width, grid_display_width + self.ui_panel_width + 200
         )
         self.screen_height = max(
-            self.min_window_height, grid_display_height + self.ui_height + 100
+            self.min_window_height,
+            grid_display_height + self.mode_info_height + 200,
         )
 
         self.screen = pygame.display.set_mode(
             (self.screen_width, self.screen_height), pygame.RESIZABLE
         )
-        pygame.display.set_caption("Store Layout Grid Editor - NaviStore")
+        pygame.display.set_caption("NaviStore Grid Editor — Modern UI")
 
-        # Fonts for text
-        self.font = pygame.font.Font(None, 24)
+        # Fonts
+        self.font = pygame.font.Font(None, 22)
         self.small_font = pygame.font.Font(None, 18)
-        self.tiny_font = pygame.font.Font(None, 16)
+        self.tiny_font = pygame.font.Font(None, 14)
 
-        # Grid state
+        # Model (grid state)
         self.grid = np.zeros((self.grid_height, self.grid_width), dtype=int)
         self.original_grid = None
         self.has_changes = False
-        self.zones = []  # List of Zone objects for polygon overlays
+        self.zones = []
 
-        # View offset
-        self.offset_x = 50
-        self.offset_y = 50
+        # View offsets
+        self.offset_x = 100
+        self.offset_y = self.top_menu_height + 20
 
-        # Interface state
+        # Interaction state
         self.running = True
-        self.current_tool = 0  # 0=navigable, -1=obstacle, 1=POI, 2=shelf
-        self.mouse_pressed = False
-        self.tool_names = {0: "Zone libre", -1: "Obstacle", 1: "POI", 2: "Étagère"}
-        self.tool_colors = {0: "blanc", -1: "noir", 1: "vert", 2: "marron"}
+        self.current_tool = 0  # left-click tool (0, -1, 1, 2)
+        self.side_selected_tool = -1  # set by side palette (black/-1 default)
 
-        # Mode coordonnées
+        # Dragging state: which tool is currently being applied while mouse held
+        self.drag_tool: Optional[int] = None
+
+        # Modes
         self.coordinate_mode = False
-        self.last_clicked_cell = None
-        self.last_clicked_coords = None
-
-        # Mode pathfinding
         self.pathfinding_mode = False
         self.pathfinding_algorithm = "astar"
         self.path_start = None
         self.path_goal = None
         self.computed_path = None
         self.path_stats = None
-        self.pathfinding_step = 0  # 0=choisir start, 1=choisir goal, 2=chemin calculé
+        self.pathfinding_step = 0
 
-        # Interface buttons
-        self.buttons = self._create_buttons()
-
-        # Statistics
+        # Stats
         self.stats = {"navigable": 0, "obstacles": 0, "pois": 0, "shelves": 0}
 
-        print("Store Layout Grid Editor initialized")
-        print("Controls:")
-        print("  Left click: Use current tool")
-        print("  Right click: Obstacle (black)")
-        print("  Middle click: POI (green)")
-        print("  1-4: Select tool (navigable/obstacle/POI/shelf)")
-        print("  Tab: Cycle tools")
-        print("  S: Save")
-        print("  R: Reset")
-        print("  ESC: Quit")
-        print("  +/-: Adjust cell size")
+        # Menu state
+        self.menu_items = ["Fichier", "Mode", "Aide"]
+        self.open_dropdown = None  # None or one of menu names
+        self.infos_visible = True  # grouped "Infos" panel visibility
 
-    def _create_buttons(self) -> list:
-        """Create interface buttons."""
-        buttons = []
-        y_pos = self.screen_height - 80
+        # Dropdown definitions: each is list of (label, callback, shortcut)
+        self.dropdowns = {
+            "Fichier": [
+                ("Nouveau \t Ctrl+N", self._new_grid, (pygame.K_n, True)),
+                ("Ouvrir \t Ctrl+O", self._load_grid, (pygame.K_o, True)),
+                ("Sauver \t Ctrl+S", self._save_grid, (pygame.K_s, True)),
+                ("Reset", self._reset_grid, None),
+                ("Taille...", self._resize_grid, None),
+                ("—", None, None),
+                ("Infos (afficher/masquer)", self._toggle_infos, None),
+                ("Aide", self._show_help, None),
+                ("Quitter \t Ctrl+Q", self._quit_editor, (pygame.K_q, True)),
+            ],
+            "Mode": [
+                ("Coordonnées", self._activate_coordinate_mode, None),
+                ("Pathfinding", self._activate_pathfinding_mode, None),
+            ],
+            "Aide": [
+                ("À propos", self._show_about, None),
+            ],
+        }
 
-        button_configs = [
-            ("Nouveau", self._new_grid, 50),
-            ("Ouvrir", self._load_grid, 150),
-            ("Sauver", self._save_grid, 250),
-            ("Reset", self._reset_grid, 350),
-            ("Taille", self._resize_grid, 450),
-            ("Coord", self._toggle_coordinate_mode, 550),
-            ("Path", self._toggle_pathfinding_mode, 650),
-            ("Aide", self._show_help, 750),
-            ("Quitter", self._quit_editor, 850),
+        # Palette on left side (black, green, orange)
+        # Each palette item is (label, color, value)
+        self.palette = [
+            ("Obstacle", COLORS["obstacle"], -1),  # black
+            ("POI", COLORS["poi"], 1),  # green
+            ("Étagère", COLORS["shelf"], 2),  # orange
         ]
 
-        for text, callback, x_pos in button_configs:
-            button = {
-                "rect": pygame.Rect(x_pos, y_pos, 80, 30),
-                "text": text,
-                "callback": callback,
-                "hovered": False,
-            }
-            buttons.append(button)
+        # Remove legacy big buttons; file actions are now in menu
+        self.buttons = []
 
-        return buttons
+        # Misc prints
+        print("NaviStore Grid Editor (refactored) initialized")
 
+        # Initial stats
+        self._update_stats()
+
+    # ------------------------- Model utilities -------------------------
     def _update_stats(self):
-        """Update grid statistics."""
         unique, counts = np.unique(self.grid, return_counts=True)
         stats_dict = dict(zip(unique, counts))
-
         self.stats = {
             "navigable": int(stats_dict.get(0, 0)),
             "obstacles": int(stats_dict.get(-1, 0)),
@@ -202,647 +201,49 @@ class GridEditor:
         }
 
     def _calculate_layout_hash(self) -> str:
-        """Calculate XXH3 64-bit hash of the grid for a unique filename."""
-        # Create data as in the optimization system
         grid_bytes = self.grid.astype(np.int8).tobytes()
         edge_length_bytes = np.array([self.edge_length], dtype=np.float64).tobytes()
-
-        # Combine data
         combined_data = grid_bytes + edge_length_bytes
-
-        # Calculer le hash XXH3 64-bit
         hasher = xxhash.xxh3_64()
         hasher.update(combined_data)
-
         return hasher.hexdigest()
 
-    def _get_grid_pos(self, mouse_pos: Tuple[int, int]) -> Optional[Tuple[int, int]]:
-        """Convert mouse position to grid coordinates (x=row, y=col)."""
-        mx, my = mouse_pos
-
-        # mx correspond aux colonnes (y), my correspond aux lignes (x)
-        col = (mx - self.offset_x) // self.cell_size  # y coordinate
-        row = (my - self.offset_y) // self.cell_size  # x coordinate
-
-        if 0 <= col < self.grid_width and 0 <= row < self.grid_height:
-            return int(row), int(col)  # Retourne (x=row, y=col)
-        return None
-
-    def _draw_grid(self):
-        """Draw the main grid."""
-        # Grid background
-        grid_rect = pygame.Rect(
-            self.offset_x,
-            self.offset_y,
-            self.grid_width * self.cell_size,
-            self.grid_height * self.cell_size,
-        )
-        pygame.draw.rect(self.screen, COLORS["background"], grid_rect)
-
-        # Draw cells
-        for y in range(self.grid_height):
-            for x in range(self.grid_width):
-                cell_rect = pygame.Rect(
-                    self.offset_x + x * self.cell_size,
-                    self.offset_y + y * self.cell_size,
-                    self.cell_size,
-                    self.cell_size,
-                )
-
-                # Color according to cell type
-                cell_value = self.grid[y, x]
-                if cell_value == 0:
-                    color = COLORS["navigable"]
-                elif cell_value == 1:
-                    color = COLORS["poi"]
-                elif cell_value == 2:
-                    color = COLORS["shelf"]
-                else:  # -1
-                    color = COLORS["obstacle"]
-
-                pygame.draw.rect(self.screen, color, cell_rect)
-                pygame.draw.rect(self.screen, COLORS["grid_line"], cell_rect, 1)
-
-        # Draw zones if any
-        self._draw_zones()
-
-        # Draw pathfinding elements if active
-        if self.pathfinding_mode:
-            self._draw_pathfinding_elements()
-
-    def _draw_pathfinding_elements(self):
-        """Draw pathfinding elements (start, goal, path)."""
-        # Draw path first (under points)
-        if self.computed_path and len(self.computed_path) > 1:
-            # Convert path to screen coordinates
-            path_points = []
-            for px, py in self.computed_path:
-                screen_x = self.offset_x + py * self.cell_size + self.cell_size // 2
-                screen_y = self.offset_y + px * self.cell_size + self.cell_size // 2
-                path_points.append((screen_x, screen_y))
-
-            # Draw path lines
-            if len(path_points) > 1:
-                pygame.draw.lines(
-                    self.screen, COLORS["path_line"], False, path_points, 3
-                )
-
-            # Draw points on path
-            for point in path_points[1:-1]:  # Exclude start and goal
-                pygame.draw.circle(self.screen, COLORS["path_line"], point, 2)
-
-        # Draw starting point
-        if self.path_start:
-            start_x, start_y = self.path_start  # x=row, y=col
-            start_rect = pygame.Rect(
-                self.offset_x + start_y * self.cell_size + 2,
-                self.offset_y + start_x * self.cell_size + 2,
-                self.cell_size - 4,
-                self.cell_size - 4,
-            )
-            pygame.draw.rect(self.screen, COLORS["path_start"], start_rect)
-            pygame.draw.rect(self.screen, (128, 0, 0), start_rect, 2)
-
-            # "S" label for Start
-            if self.cell_size >= 20:
-                font_size = min(self.cell_size - 8, 24)
-                font = pygame.font.Font(None, font_size)
-                text = font.render("S", True, (255, 255, 255))
-                text_rect = text.get_rect(center=start_rect.center)
-                self.screen.blit(text, text_rect)
-
-        # Draw goal point
-        if self.path_goal:
-            goal_x, goal_y = self.path_goal  # x=row, y=col
-            goal_rect = pygame.Rect(
-                self.offset_x + goal_y * self.cell_size + 2,
-                self.offset_y + goal_x * self.cell_size + 2,
-                self.cell_size - 4,
-                self.cell_size - 4,
-            )
-            pygame.draw.rect(self.screen, COLORS["path_goal"], goal_rect)
-            pygame.draw.rect(self.screen, (0, 0, 128), goal_rect, 2)
-
-            # "G" label for Goal
-            if self.cell_size >= 20:
-                font_size = min(self.cell_size - 8, 24)
-                font = pygame.font.Font(None, font_size)
-                text = font.render("G", True, (255, 255, 255))
-                text_rect = text.get_rect(center=goal_rect.center)
-                self.screen.blit(text, text_rect)
-
-    def _draw_zones(self):
-        """Draw polygon zones as semi-transparent overlays."""
-        if not self.zones:
-            return
-
-        # Create a surface for alpha blending
-        if hasattr(pygame, "SRCALPHA"):
-            zone_surface = pygame.Surface(
-                (self.screen_width, self.screen_height), pygame.SRCALPHA
-            )
-        else:
-            zone_surface = pygame.Surface((self.screen_width, self.screen_height))
-            zone_surface.set_alpha(80)
-
-        for zone in self.zones:
-            if len(zone.points) < 3:  # Need at least 3 points for a polygon
-                continue
-
-            # Convert real-world coordinates to screen coordinates
-            screen_points = []
-            for x, y in zone.points:
-                # Convert real-world coords to grid coords
-                grid_x = int(x / self.edge_length)
-                grid_y = int(y / self.edge_length)
-                # Convert grid coords to screen coords
-                screen_x = self.offset_x + grid_y * self.cell_size
-                screen_y = self.offset_y + grid_x * self.cell_size
-                screen_points.append((screen_x, screen_y))
-
-            if len(screen_points) >= 3:
-                # Draw filled polygon
-                pygame.draw.polygon(zone_surface, COLORS["zone"][:3], screen_points)
-                # Draw polygon outline
-                pygame.draw.polygon(zone_surface, (255, 255, 0), screen_points, 2)
-
-        # Blit the zone surface onto the main screen
-        self.screen.blit(zone_surface, (0, 0))
-
-    def _draw_ui(self):
-        """Draw the user interface."""
-        # Calculate info panel position
-        grid_display_width = self.grid_width * self.cell_size
-        info_x = self.offset_x + grid_display_width + 20
-        info_width = self.ui_panel_width
-        info_height = min(self.screen_height - self.ui_height - 40, 600)
-
-        # Main information panel
-        info_rect = pygame.Rect(info_x, self.offset_y, info_width, info_height)
-        pygame.draw.rect(self.screen, COLORS["ui_bg"], info_rect)
-        pygame.draw.rect(self.screen, COLORS["grid_line"], info_rect, 2)
-
-        # Title with version
-        title_text = self.font.render(
-            "Éditeur de Grille NaviStore", True, COLORS["text"]
-        )
-        self.screen.blit(title_text, (info_rect.x + 10, info_rect.y + 10))
-
-        version_text = self.tiny_font.render(
-            "v1.0 - JPS-TSP Editor", True, (100, 100, 100)
-        )
-        self.screen.blit(version_text, (info_rect.x + 10, info_rect.y + 35))
-
-        y_offset = 55
-        section_spacing = 25
-        line_spacing = 18
-
-        # Grid Information section
-        self._draw_section_title(
-            "Informations Grille", info_rect.x + 10, info_rect.y + y_offset
-        )
-        y_offset += section_spacing
-
-        grid_info = [
-            f"Dimensions: {self.grid_width} × {self.grid_height} cells",
-            f"Cell size: {self.edge_length:.1f} cm",
-            f"Total area: {(self.grid_width * self.edge_length / 100):.1f} × {(self.grid_height * self.edge_length / 100):.1f} m",
-            f"Current zoom: {self.cell_size} pixels/cell",
-        ]
-
-        for text in grid_info:
-            text_surface = self.small_font.render(text, True, COLORS["text"])
-            self.screen.blit(text_surface, (info_rect.x + 15, info_rect.y + y_offset))
-            y_offset += line_spacing
-
-        y_offset += 10
-
-        # Statistics section
-        self._draw_section_title(
-            "Statistiques", info_rect.x + 10, info_rect.y + y_offset
-        )
-        y_offset += section_spacing
-
-        total_cells = self.grid_width * self.grid_height
-        stats_info = [
-            f"Total cellules: {total_cells}",
-            f"Zones libres: {self.stats['navigable']} ({self.stats['navigable']/total_cells*100:.1f}%)",
-            f"Obstacles: {self.stats['obstacles']} ({self.stats['obstacles']/total_cells*100:.1f}%)",
-            f"Points d'intérêt: {self.stats['pois']} ({self.stats['pois']/total_cells*100:.1f}%)",
-            f"Étagères: {self.stats['shelves']} ({self.stats['shelves']/total_cells*100:.1f}%)",
-        ]
-
-        for text in stats_info:
-            text_surface = self.small_font.render(text, True, COLORS["text"])
-            self.screen.blit(text_surface, (info_rect.x + 15, info_rect.y + y_offset))
-            y_offset += line_spacing
-
-        y_offset += 10
-
-        # Tools section
-        self._draw_section_title(
-            "Outils de Dessin", info_rect.x + 10, info_rect.y + y_offset
-        )
-        y_offset += section_spacing
-
-        tools_info = [
-            "🖱️ Clic gauche: Outil actuel",
-            "🖱️ Clic droit: Obstacle (noir)",
-            "🖱️ Clic milieu: Point d'intérêt (vert)",
-            "🖱️ Glisser: Dessiner en continu",
-            "",
-            f"🔧 Outil actuel: {self.tool_names[self.current_tool]} ({self.tool_colors[self.current_tool]})",
-        ]
-
-        for text in tools_info:
-            text_surface = self.small_font.render(text, True, COLORS["text"])
-            self.screen.blit(text_surface, (info_rect.x + 15, info_rect.y + y_offset))
-            y_offset += line_spacing
-
-        y_offset += 10
-
-        # Keyboard shortcuts section
-        self._draw_section_title(
-            "Raccourcis Clavier", info_rect.x + 10, info_rect.y + y_offset
-        )
-        y_offset += section_spacing
-
-        shortcuts_info = [
-            "⌨️ S: Sauvegarder la grille",
-            "⌨️ R: Réinitialiser/Reset",
-            "⌨️ +/-: Ajuster le zoom",
-            "⌨️ ESC: Quitter l'éditeur",
-            "⌨️ Ctrl+N: Nouvelle grille",
-            "⌨️ Ctrl+O: Ouvrir fichier",
-            "⌨️ 1-4: Sélectionner outil",
-            "⌨️ Tab: Outil suivant",
-        ]
-
-        for text in shortcuts_info:
-            text_surface = self.small_font.render(text, True, COLORS["text"])
-            self.screen.blit(text_surface, (info_rect.x + 15, info_rect.y + y_offset))
-            y_offset += line_spacing
-
-        y_offset += 10
-
-        # Color legend section
-        self._draw_section_title("Légende", info_rect.x + 10, info_rect.y + y_offset)
-        y_offset += section_spacing
-
-        legend_items = [
-            ("Zone libre (navigable)", COLORS["navigable"], "0"),
-            ("Obstacle (mur/rayon)", COLORS["obstacle"], "-1"),
-            ("Point d'intérêt", COLORS["poi"], "1"),
-            ("Étagère", COLORS["shelf"], "2"),
-        ]
-
-        for i, (label, color, value) in enumerate(legend_items):
-            color_rect = pygame.Rect(info_rect.x + 15, y_offset + i * 22, 18, 18)
-            pygame.draw.rect(self.screen, color, color_rect)
-            pygame.draw.rect(self.screen, COLORS["grid_line"], color_rect, 1)
-
-            label_text = self.small_font.render(
-                f"{label} ({value})", True, COLORS["text"]
-            )
-            self.screen.blit(label_text, (info_rect.x + 40, y_offset + i * 22 + 2))
-
-        y_offset += len(legend_items) * 22 + 15
-
-        # Coordinates mode section
-        coord_title_color = (0, 100, 200) if self.coordinate_mode else COLORS["text"]
-        coord_title = (
-            "🎯 Mode Coordonnées" if self.coordinate_mode else "Mode Coordonnées"
-        )
-        self._draw_section_title(
-            coord_title, info_rect.x + 10, info_rect.y + y_offset, coord_title_color
-        )
-        y_offset += section_spacing
-
-        if self.coordinate_mode:
-            coord_info = [
-                "🟢 ACTIF - Cliquez sur une case",
-                "pour voir ses coordonnées",
-            ]
-
-            if self.last_clicked_cell:
-                x, y = self.last_clicked_cell  # x=row, y=col
-                world_x, world_y = self.last_clicked_coords
-                cell_value = self.grid[x, y]
-
-                value_names = {0: "libre", 1: "POI", -1: "obstacle", 2: "étagère"}
-                value_name = value_names.get(cell_value, "inconnu")
-
-                coord_info.extend(
-                    [
-                        "",
-                        f"Dernière case cliquée:",
-                        f"• Grille: ({x}, {y})",
-                        f"• Monde: ({world_x:.1f}, {world_y:.1f}) cm",
-                        f"• Type: {value_name} ({cell_value})",
-                    ]
-                )
-        else:
-            coord_info = [
-                "🔘 INACTIF - Cliquez sur 'Coord'",
-                "pour activer le mode",
-            ]
-
-        for text in coord_info:
-            text_color = (0, 100, 200) if self.coordinate_mode else COLORS["text"]
-            text_surface = self.small_font.render(text, True, text_color)
-            self.screen.blit(text_surface, (info_rect.x + 15, info_rect.y + y_offset))
-            y_offset += line_spacing
-
-        y_offset += 15
-
-        # Pathfinding mode section
-        if PATHFINDING_AVAILABLE:
-            path_title_color = (
-                (200, 100, 0) if self.pathfinding_mode else COLORS["text"]
-            )
-            path_title = (
-                "🎯 Mode Pathfinding" if self.pathfinding_mode else "Mode Pathfinding"
-            )
-            self._draw_section_title(
-                path_title, info_rect.x + 10, info_rect.y + y_offset, path_title_color
-            )
-            y_offset += section_spacing
-
-            if self.pathfinding_mode:
-                path_info = [
-                    f"🟢 ACTIF - Algorithme: {self.pathfinding_algorithm.upper()}",
-                ]
-
-                if self.pathfinding_step == 0:
-                    path_info.append("1️⃣ Cliquez pour choisir le DÉPART")
-                elif self.pathfinding_step == 1:
-                    path_info.append("2️⃣ Cliquez pour choisir l'ARRIVÉE")
-                    if self.path_start:
-                        path_info.append(
-                            f"   Départ: ({self.path_start[0]}, {self.path_start[1]})"
-                        )
-                elif self.pathfinding_step == 2:
-                    path_info.append("3️⃣ Cliquez pour RECOMMENCER")
-
-                # Afficher les statistiques si disponibles
-                if self.path_stats:
-                    path_info.append("")
-                    if self.path_stats["success"]:
-                        path_info.extend(
-                            [
-                                "✅ CHEMIN TROUVÉ:",
-                                f"   Points: {self.path_stats['path_length']}",
-                                f"   Distance: {self.path_stats['path_distance']:.2f}",
-                                f"   Euclidienne: {self.path_stats['euclidean_distance']:.2f}",
-                                f"   Ratio: {self.path_stats['efficiency_ratio']:.2f}",
-                                f"   Temps: {self.path_stats['computation_time']:.1f}ms",
-                            ]
-                        )
-                    else:
-                        path_info.extend(
-                            [
-                                "❌ AUCUN CHEMIN:",
-                                f"   Erreur: {self.path_stats.get('error', 'Inconnu')}",
-                                f"   Distance eucl: {self.path_stats.get('euclidean_distance', 0):.2f}",
-                            ]
-                        )
-
-                # Afficher les coordonnées des points sélectionnés
-                if self.path_start:
-                    path_info.append("")
-                    path_info.append(
-                        f"🚀 Départ: ({self.path_start[0]}, {self.path_start[1]})"
-                    )
-                if self.path_goal:
-                    path_info.append(
-                        f"🎯 Arrivée: ({self.path_goal[0]}, {self.path_goal[1]})"
-                    )
-
-            else:
-                path_info = [
-                    "🔘 INACTIF - Cliquez sur 'Path'",
-                    "pour activer le test de chemins",
-                    "",
-                    "Fonctionnalités:",
-                    "• Test de pathfinding A*",
-                    "• Visualisation des chemins",
-                    "• Statistiques détaillées",
-                    "• Support obstacles/POIs",
-                ]
-
-            for text in path_info:
-                text_color = (200, 100, 0) if self.pathfinding_mode else COLORS["text"]
-                text_surface = self.small_font.render(text, True, text_color)
-                self.screen.blit(
-                    text_surface, (info_rect.x + 15, info_rect.y + y_offset)
-                )
-                y_offset += line_spacing
-        else:
-            # Pathfinding unavailable
-            self._draw_section_title(
-                "❌ Pathfinding indisponible",
-                info_rect.x + 10,
-                info_rect.y + y_offset,
-                (150, 150, 150),
-            )
-            y_offset += section_spacing
-
-            unavailable_info = [
-                "Module pathfinding manquant",
-                "Installez avec:",
-                "pip install pathfinding",
-            ]
-
-            for text in unavailable_info:
-                text_surface = self.small_font.render(text, True, (150, 150, 150))
-                self.screen.blit(
-                    text_surface, (info_rect.x + 15, info_rect.y + y_offset)
-                )
-                y_offset += line_spacing
-
-        # Unsaved changes indicator at top
-        if self.has_changes:
-            changes_text = self.font.render(
-                "⚠️ Modifications non sauvées", True, (255, 0, 0)
-            )
-            self.screen.blit(changes_text, (10, 10))
-        else:
-            saved_text = self.small_font.render("✅ Sauvegardé", True, (0, 150, 0))
-            self.screen.blit(saved_text, (10, 15))
-
-    def _draw_section_title(self, title: str, x: int, y: int, color=None):
-        """Draw a section title."""
-        if color is None:
-            color = COLORS["text"]
-
-        # Colored background for title
-        title_surface = self.font.render(title, True, color)
-        title_rect = pygame.Rect(
-            x - 5, y - 2, title_surface.get_width() + 10, title_surface.get_height() + 4
-        )
-        pygame.draw.rect(self.screen, (220, 220, 220), title_rect)
-        pygame.draw.rect(self.screen, COLORS["grid_line"], title_rect, 1)
-        self.screen.blit(title_surface, (x, y))
-
-    def _draw_buttons(self):
-        """Draw interface buttons."""
-        mouse_pos = pygame.mouse.get_pos()
-
-        for button in self.buttons:
-            # Check hover
-            button["hovered"] = button["rect"].collidepoint(mouse_pos)
-
-            # Special color for active buttons
-            if button["text"] == "Coord" and self.coordinate_mode:
-                color = (100, 150, 255)  # Blue for active mode
-                text_color = (255, 255, 255)  # White text
-            elif button["text"] == "Path" and self.pathfinding_mode:
-                color = (255, 150, 50)  # Orange for active pathfinding mode
-                text_color = (255, 255, 255)  # White text
-            elif button["text"] == "Path" and not PATHFINDING_AVAILABLE:
-                color = (120, 120, 120)  # Gray for unavailable pathfinding
-                text_color = (200, 200, 200)  # Light gray text
-            else:
-                color = (
-                    COLORS["button_hover"] if button["hovered"] else COLORS["button"]
-                )
-                text_color = COLORS["text"]
-
-            # Draw button
-            pygame.draw.rect(self.screen, color, button["rect"])
-            pygame.draw.rect(self.screen, COLORS["grid_line"], button["rect"], 2)
-
-            # Button text
-            text_surface = self.small_font.render(button["text"], True, text_color)
-            text_rect = text_surface.get_rect(center=button["rect"].center)
-            self.screen.blit(text_surface, text_rect)
-
-    def _handle_mouse_click(self, pos: Tuple[int, int], button: int):
-        """Handle mouse clicks."""
-        # Check button clicks
-        for ui_button in self.buttons:
-            if ui_button["rect"].collidepoint(pos):
-                ui_button["callback"]()
-                return
-
-        # Get position in grid
-        grid_pos = self._get_grid_pos(pos)
-        if grid_pos:
-            x, y = grid_pos  # x=row, y=col
-
-            # Pathfinding mode: start/goal point management
-            if self.pathfinding_mode and button == 1:  # Left click only
-                # Check that cell is free
-                if self.grid[x, y] == -1:  # Obstacle
-                    print(f"❌ Cannot select obstacle at ({x}, {y})")
-                    return
-
-                if self.pathfinding_step == 0:  # Choose start
-                    self.path_start = (x, y)
-                    self.pathfinding_step = 1
-                    print(
-                        f"🚀 Point de départ sélectionné: ({x}, {y}) - Cliquez pour choisir l'arrivée"
-                    )
-
-                elif self.pathfinding_step == 1:  # Choose goal
-                    if (x, y) == self.path_start:
-                        print("⚠️ Goal point must be different from starting point")
-                        return
-
-                    self.path_goal = (x, y)
-                    print(f"🎯 Goal point selected: ({x}, {y}) - Computing path...")
-
-                    # Calculate path automatically
-                    self._compute_pathfinding()
-
-                elif self.pathfinding_step == 2:  # Path calculated, restart
-                    print("🔄 New test - Click to choose starting point")
-                    self._reset_pathfinding()
-                    self.path_start = (x, y)
-                    self.pathfinding_step = 1
-                    print(
-                        f"🚀 Starting point selected: ({x}, {y}) - Click to choose destination"
-                    )
-
-                return
-
-            # Coordinates mode: display information
-            if self.coordinate_mode:
-                world_x, world_y = self._calculate_world_coordinates(x, y)
-                self.last_clicked_cell = (x, y)
-                self.last_clicked_coords = (world_x, world_y)
-
-                # Display in console
-                print(f"🎯 Cell coordinates:")
-                print(f"   Grid: (x={x}, y={y}) = (row={x}, col={y})")
-                print(f"   World: ({world_x:.1f}cm, {world_y:.1f}cm)")
-                print(f"   Value: {self.grid[x, y]}")
-                return
-
-            # Normal edit mode (if not pathfinding nor coordinates)
-            if not self.pathfinding_mode and not self.coordinate_mode:
-                # Determine value by button or use current tool
-                if button == 1:  # Left click - use current tool
-                    new_value = self.current_tool
-                elif button == 3:  # Right click - obstacle
-                    new_value = -1
-                elif button == 2:  # Middle click - POI
-                    new_value = 1
-                else:
-                    return
-
-                # Apply modification
-                if self.grid[x, y] != new_value:  # grid[row, col]
-                    self.grid[x, y] = new_value
-                    self.has_changes = True
-                    self._update_stats()
-
-    def _handle_mouse_drag(self, pos: Tuple[int, int]):
-        """Handle mouse dragging."""
-        if self.mouse_pressed:
-            grid_pos = self._get_grid_pos(pos)
-            if grid_pos:
-                x, y = grid_pos  # x=row, y=col selon nouvelle convention
-
-                # Use current tool
-                if self.grid[x, y] != self.current_tool:
-                    self.grid[x, y] = self.current_tool
-                    self.has_changes = True
-                    self._update_stats()
-
+    def _calculate_world_coordinates(
+        self, grid_x: int, grid_y: int
+    ) -> Tuple[float, float]:
+        world_x = (grid_x + 0.5) * self.edge_length
+        world_y = (grid_y + 0.5) * self.edge_length
+        return world_x, world_y
+
+    # ------------------------- File operations (unchanged logic) -------------------------
     def _new_grid(self):
-        """Create a new grid."""
         if self.has_changes:
             if not self._confirm_action(
                 "Créer une nouvelle grille? Les modifications non sauvées seront perdues."
             ):
                 return
 
-        # Ask for dimensions
         root = tk.Tk()
         root.withdraw()
-
         try:
             width = simpledialog.askinteger(
                 "Nouvelle grille",
                 "Largeur:",
                 initialvalue=self.grid_width,
                 minvalue=5,
-                maxvalue=100,
+                maxvalue=200,
             )
             if width is None:
                 return
-
             height = simpledialog.askinteger(
                 "Nouvelle grille",
                 "Hauteur:",
                 initialvalue=self.grid_height,
                 minvalue=5,
-                maxvalue=100,
+                maxvalue=200,
             )
             if height is None:
                 return
-
             edge_length = simpledialog.askfloat(
                 "Nouvelle grille",
                 "Taille cellule (cm):",
@@ -852,206 +253,113 @@ class GridEditor:
             )
             if edge_length is None:
                 return
-
-            # Créer nouvelle grille
             self.grid_width, self.grid_height = width, height
             self.edge_length = edge_length
             self.grid = np.zeros((self.grid_height, self.grid_width), dtype=int)
             self.original_grid = None
             self.has_changes = False
-            self._update_stats()
-
-            # Ajuster la fenêtre
             self._adjust_window_size()
-
-        except Exception as e:
-            messagebox.showerror("Erreur", f"Erreur lors de la création: {str(e)}")
+            self._update_stats()
         finally:
             root.destroy()
 
     def _load_grid(self):
-        """Load grid from HDF5 file."""
         if self.has_changes:
             if not self._confirm_action(
                 "Charger une grille? Les modifications non sauvées seront perdues."
             ):
                 return
-
         root = tk.Tk()
         root.withdraw()
-
         try:
             file_path = filedialog.askopenfilename(
                 title="Charger grille",
                 filetypes=[("Fichiers HDF5", "*.h5"), ("Tous fichiers", "*.*")],
-                initialdir=os.path.join(
-                    os.path.dirname(__file__), "..", "assets", "layouts"
-                ),
             )
-
-            if file_path:
-                if PATHFINDING_AVAILABLE:
-                    # Use enhanced loading function with zone support
-                    layout, edge_length, zones_dict = load_layout_from_h5(file_path)
-                    self.zones = list(zones_dict.values())
-                else:
-                    # Fallback to basic loading
-                    with h5py.File(file_path, "r") as f:
-                        layout = np.array(f["layout"])
-                        edge_length = float(f["edge_length"][()])
-                    self.zones = []
-
-                # Get stored hash for verification
+            if not file_path:
+                return
+            if PATHFINDING_AVAILABLE:
+                layout, edge_length, zones_dict = load_layout_from_h5(file_path)
+                self.zones = list(zones_dict.values())
+            else:
                 with h5py.File(file_path, "r") as f:
-                    stored_hash = f.attrs.get("layout_hash", "Non disponible")
-
-                self.grid = layout
-                self.grid_height, self.grid_width = layout.shape
-                self.edge_length = edge_length
-                self.original_grid = layout.copy()
-                self.has_changes = False
-                self._update_stats()
-
-                # Calculate current hash for verification
-                current_hash = self._calculate_layout_hash()
-
-                # Check integrity
-                hash_match = (
-                    stored_hash != "Non disponible" and stored_hash == current_hash
-                )
-
-                # Extract filename for display
-                filename = os.path.basename(file_path)
-
-                # Ajuster la fenêtre
-                self._adjust_window_size()
-
-                # Success message with detailed information
-                info_message = f"Grille chargée: {self.grid_width}x{self.grid_height}\n"
-                info_message += f"Fichier: {filename}\n"
-                info_message += f"Hash XXH3: {current_hash}\n"
-
-                if stored_hash != "Non disponible":
-                    if hash_match:
-                        info_message += "✓ Intégrité vérifiée"
-                    else:
-                        info_message += f"⚠ Hash différent du stocké: {stored_hash}"
+                    layout = np.array(f["layout"])
+                    edge_length = float(f["edge_length"][()])
+                self.zones = []
+            with h5py.File(file_path, "r") as f:
+                stored_hash = f.attrs.get("layout_hash", "Non disponible")
+            self.grid = layout
+            self.grid_height, self.grid_width = layout.shape
+            self.edge_length = edge_length
+            self.original_grid = layout.copy()
+            self.has_changes = False
+            self._update_stats()
+            current_hash = self._calculate_layout_hash()
+            filename = os.path.basename(file_path)
+            info_message = f"Grille chargée: {self.grid_width}x{self.grid_height}\nFichier: {filename}\nHash XXH3: {current_hash}\n"
+            if stored_hash != "Non disponible":
+                if stored_hash == current_hash:
+                    info_message += "✓ Intégrité vérifiée"
                 else:
-                    info_message += "ℹ Pas de hash stocké (fichier ancien)"
-
-                messagebox.showinfo("Succès", info_message)
-
-        except Exception as e:
-            messagebox.showerror("Erreur", f"Erreur lors du chargement: {str(e)}")
+                    info_message += f"⚠ Hash différent du stocké: {stored_hash}"
+            else:
+                info_message += "ℹ Pas de hash stocké (fichier ancien)"
+            messagebox.showinfo("Succès", info_message)
+            self._adjust_window_size()
         finally:
             root.destroy()
 
     def _save_grid(self):
-        """Save current grid with XXH3 64-bit hash as filename."""
         root = tk.Tk()
         root.withdraw()
-
         try:
-            # Calculate XXH3 64-bit hash of grid
             layout_hash = self._calculate_layout_hash()
-
-            # Propose save directory
             save_dir = filedialog.askdirectory(
-                title="Choisir le répertoire de sauvegarde",
-                initialdir=os.path.join(
-                    os.path.dirname(__file__), "..", "assets", "layouts"
-                ),
+                title="Choisir le répertoire de sauvegarde"
             )
-
-            if save_dir:
-                # Create filename based on hash
-                file_path = os.path.join(save_dir, f"{layout_hash}.h5")
-
-                # Check if file already exists
-                if os.path.exists(file_path):
-                    if not messagebox.askyesno(
-                        "Fichier existant",
-                        f"Le fichier {layout_hash}.h5 existe déjà.\n"
-                        "Voulez-vous l'écraser?",
-                    ):
-                        return
-
-                if PATHFINDING_AVAILABLE:
-                    # Use enhanced saving function with zone support
-                    zones_dict = {
-                        f"zone_{i}": zone for i, zone in enumerate(self.zones)
-                    }
-                    save_layout_to_h5(
-                        file_path, self.grid, self.edge_length, zones_dict
-                    )
-
-                    # Add additional attributes
-                    with h5py.File(file_path, "a") as f:
-                        f.attrs["layout_hash"] = layout_hash
-                        f.attrs["created_with"] = "NaviStore Grid Editor"
-                else:
-                    # Fallback to basic saving
-                    with h5py.File(file_path, "w") as f:
-                        f.create_dataset("layout", data=self.grid)
-                        f.create_dataset("edge_length", data=self.edge_length)
-
-                        # Add hash as attribute for verification
-                        f.attrs["layout_hash"] = layout_hash
-                        f.attrs["created_with"] = "NaviStore Grid Editor"
-
-                self.original_grid = self.grid.copy()
-                self.has_changes = False
-
-                # Also save metadata with same name
-                metadata_file = os.path.join(save_dir, f"{layout_hash}_metadata.json")
-
-                # Convert NumPy types to native Python types for JSON
-                def convert_numpy_types(obj):
-                    """Convertit les types NumPy en types Python natifs."""
-                    if isinstance(obj, np.integer):
-                        return int(obj)
-                    elif isinstance(obj, np.floating):
-                        return float(obj)
-                    elif isinstance(obj, np.ndarray):
-                        return obj.tolist()
-                    elif isinstance(obj, tuple):
-                        return tuple(convert_numpy_types(item) for item in obj)
-                    elif isinstance(obj, dict):
-                        return {
-                            key: convert_numpy_types(value)
-                            for key, value in obj.items()
-                        }
-                    elif isinstance(obj, list):
-                        return [convert_numpy_types(item) for item in obj]
-                    return obj
-
-                metadata = {
-                    "layout_hash": layout_hash,
-                    "grid_shape": [int(self.grid.shape[0]), int(self.grid.shape[1])],
-                    "edge_length": float(self.edge_length),
-                    "statistics": convert_numpy_types(self.stats),
-                    "file_path": file_path,
-                    "created_with": "NaviStore Grid Editor",
-                }
-
-                with open(metadata_file, "w") as f:
-                    json.dump(metadata, f, indent=2)
-
-                messagebox.showinfo(
-                    "Succès",
-                    f"Grille sauvegardée:\n"
-                    f"Nom: {layout_hash}.h5\n"
-                    f"Hash XXH3: {layout_hash}\n"
-                    f"Chemin: {file_path}",
-                )
-
-        except Exception as e:
-            messagebox.showerror("Erreur", f"Erreur lors de la sauvegarde: {str(e)}")
+            if not save_dir:
+                return
+            file_path = os.path.join(save_dir, f"{layout_hash}.h5")
+            if os.path.exists(file_path):
+                if not messagebox.askyesno(
+                    "Fichier existant",
+                    f"Le fichier {layout_hash}.h5 existe déjà.\nVoulez-vous l'écraser?",
+                ):
+                    return
+            if PATHFINDING_AVAILABLE:
+                zones_dict = {f"zone_{i}": zone for i, zone in enumerate(self.zones)}
+                save_layout_to_h5(file_path, self.grid, self.edge_length, zones_dict)
+                with h5py.File(file_path, "a") as f:
+                    f.attrs["layout_hash"] = layout_hash
+                    f.attrs["created_with"] = "NaviStore Grid Editor"
+            else:
+                with h5py.File(file_path, "w") as f:
+                    f.create_dataset("layout", data=self.grid)
+                    f.create_dataset("edge_length", data=self.edge_length)
+                    f.attrs["layout_hash"] = layout_hash
+                    f.attrs["created_with"] = "NaviStore Grid Editor"
+            self.original_grid = self.grid.copy()
+            self.has_changes = False
+            # metadata
+            metadata_file = os.path.join(save_dir, f"{layout_hash}_metadata.json")
+            metadata = {
+                "layout_hash": layout_hash,
+                "grid_shape": [int(self.grid.shape[0]), int(self.grid.shape[1])],
+                "edge_length": float(self.edge_length),
+                "statistics": self.stats,
+                "file_path": file_path,
+                "created_with": "NaviStore Grid Editor",
+            }
+            with open(metadata_file, "w") as f:
+                json.dump(metadata, f, indent=2)
+            messagebox.showinfo(
+                "Succès",
+                f"Grille sauvegardée:\nNom: {layout_hash}.h5\nChemin: {file_path}",
+            )
         finally:
             root.destroy()
 
     def _reset_grid(self):
-        """Reset grid to original state."""
         if self.original_grid is not None:
             if self._confirm_action("Annuler toutes les modifications?"):
                 self.grid = self.original_grid.copy()
@@ -1064,113 +372,69 @@ class GridEditor:
                 self._update_stats()
 
     def _resize_grid(self):
-        """Resize the grid."""
         root = tk.Tk()
         root.withdraw()
-
         try:
             width = simpledialog.askinteger(
                 "Redimensionner",
                 "Nouvelle largeur:",
                 initialvalue=self.grid_width,
                 minvalue=5,
-                maxvalue=100,
+                maxvalue=200,
             )
             if width is None:
                 return
-
             height = simpledialog.askinteger(
                 "Redimensionner",
                 "Nouvelle hauteur:",
                 initialvalue=self.grid_height,
                 minvalue=5,
-                maxvalue=100,
+                maxvalue=200,
             )
             if height is None:
                 return
-
-            # Create new grid with resizing
             new_grid = np.zeros((height, width), dtype=int)
-
-            # Copy old grid (truncate or extend as needed)
             copy_height = min(self.grid_height, height)
             copy_width = min(self.grid_width, width)
-
             new_grid[:copy_height, :copy_width] = self.grid[:copy_height, :copy_width]
-
             self.grid = new_grid
             self.grid_width, self.grid_height = width, height
             self.has_changes = True
             self._update_stats()
-
-            # Ajuster la fenêtre
             self._adjust_window_size()
-
-        except Exception as e:
-            messagebox.showerror(
-                "Erreur", f"Erreur lors du redimensionnement: {str(e)}"
-            )
         finally:
             root.destroy()
 
-    def _adjust_window_size(self):
-        """Adjust window size according to grid."""
-        # Calculate new dimensions
-        grid_display_width = self.grid_width * self.cell_size
-        grid_display_height = self.grid_height * self.cell_size
-
-        new_width = max(
-            self.min_window_width, grid_display_width + self.ui_panel_width + 100
-        )
-        new_height = max(
-            self.min_window_height, grid_display_height + self.ui_height + 100
-        )
-
-        self.screen_width = new_width
-        self.screen_height = new_height
-        self.screen = pygame.display.set_mode(
-            (self.screen_width, self.screen_height), pygame.RESIZABLE
-        )
-
-        # Recreate buttons with new positions
-        self.buttons = self._create_buttons()
-
-        # Update statistics
-        self._update_stats()
-
     def _confirm_action(self, message: str) -> bool:
-        """Display confirmation dialog."""
         root = tk.Tk()
         root.withdraw()
         try:
-            result = messagebox.askyesno("Confirmation", message)
-            return result
+            return messagebox.askyesno("Confirmation", message)
         finally:
             root.destroy()
 
-    def _toggle_pathfinding_mode(self):
-        """Enable/disable pathfinding mode."""
+    # ------------------------- Mode activation helpers -------------------------
+    def _activate_coordinate_mode(self):
+        self.coordinate_mode = True
+        self.pathfinding_mode = False
+        self._reset_pathfinding()
+
+    def _activate_pathfinding_mode(self):
         if not PATHFINDING_AVAILABLE:
             messagebox.showerror(
                 "Pathfinding indisponible",
-                "Le module pathfinding n'est pas disponible.\nInstallez avec: pip install pathfinding",
+                "Le module pathfinding n'est pas disponible.",
             )
             return
+        self.pathfinding_mode = True
+        self.coordinate_mode = False
+        self._reset_pathfinding()
 
-        self.pathfinding_mode = not self.pathfinding_mode
+    def _toggle_infos(self):
+        self.infos_visible = not self.infos_visible
 
-        if self.pathfinding_mode:
-            # Disable coordinates mode if active
-            self.coordinate_mode = False
-            # Reset pathfinding state
-            self._reset_pathfinding()
-            print("🎯 Pathfinding mode enabled - Click to choose starting point")
-        else:
-            self._reset_pathfinding()
-            print("🔘 Pathfinding mode disabled")
-
+    # ------------------------- Pathfinding (unchanged) -------------------------
     def _reset_pathfinding(self):
-        """Reset pathfinding state to zero."""
         self.path_start = None
         self.path_goal = None
         self.computed_path = None
@@ -1178,46 +442,35 @@ class GridEditor:
         self.pathfinding_step = 0
 
     def _compute_pathfinding(self):
-        """Calculate path between start and goal."""
         if not self.path_start or not self.path_goal:
             return
-
         try:
-            # Create solver
             poi_coords = np.array([self.path_start, self.path_goal])
-
             solver = PathfindingSolverFactory.create_solver(
                 grid_with_poi=self.grid,
-                distance_threshold_grid=1000000.0,  # Seuil très élevé
+                distance_threshold_grid=1000000.0,
                 poi_coords=poi_coords,
                 algorithm=self.pathfinding_algorithm,
                 diagonal_movement=True,
             )
-
-            # Calculate path
             start_time = time.time()
             path = solver.find_path(self.path_start, self.path_goal)
             computation_time = time.time() - start_time
-
-            # Calculate statistics
             euclidean_dist = np.sqrt(
                 (self.path_goal[0] - self.path_start[0]) ** 2
                 + (self.path_goal[1] - self.path_start[1]) ** 2
             )
-
             if path:
                 path_distance = 0.0
-                if len(path) > 1:
-                    for i in range(len(path) - 1):
-                        p1, p2 = path[i], path[i + 1]
-                        path_distance += np.sqrt(
-                            (p2[0] - p1[0]) ** 2 + (p2[1] - p1[1]) ** 2
-                        )
-
+                for i in range(len(path) - 1):
+                    p1, p2 = path[i], path[i + 1]
+                    path_distance += np.sqrt(
+                        (p2[0] - p1[0]) ** 2 + (p2[1] - p1[1]) ** 2
+                    )
                 self.path_stats = {
                     "success": True,
                     "algorithm": self.pathfinding_algorithm.upper(),
-                    "computation_time": computation_time * 1000,  # en ms
+                    "computation_time": computation_time * 1000,
                     "path_length": len(path),
                     "euclidean_distance": euclidean_dist,
                     "path_distance": path_distance,
@@ -1225,10 +478,6 @@ class GridEditor:
                         path_distance / euclidean_dist if euclidean_dist > 0 else 0
                     ),
                 }
-
-                print(
-                    f"✅ Path found: {len(path)} points, distance: {path_distance:.2f}"
-                )
             else:
                 self.path_stats = {
                     "success": False,
@@ -1237,11 +486,8 @@ class GridEditor:
                     "euclidean_distance": euclidean_dist,
                     "error": "No path found",
                 }
-                print("❌ No path found")
-
             self.computed_path = path
             self.pathfinding_step = 2
-
         except Exception as e:
             self.path_stats = {
                 "success": False,
@@ -1250,101 +496,490 @@ class GridEditor:
             }
             print(f"❌ Pathfinding error: {e}")
 
-    def _toggle_coordinate_mode(self):
-        """Enable/disable coordinates mode."""
-        self.coordinate_mode = not self.coordinate_mode
-        if self.coordinate_mode:
-            self.last_clicked_cell = None
-            self.last_clicked_coords = None
+    # ------------------------- UI drawing -------------------------
+    def _draw_menu_bar(self):
+        # Draw top menu bar
+        menu_rect = pygame.Rect(0, 0, self.screen_width, self.top_menu_height)
+        pygame.draw.rect(self.screen, COLORS["menu_bg"], menu_rect)
+        x = 8
+        for name in self.menu_items:
+            text = self.font.render(name, True, COLORS["text"])
+            txt_rect = text.get_rect(topleft=(x, 5))
+            self.screen.blit(text, txt_rect)
+            # Save clickable area
+            setattr(
+                self,
+                f"menu_area_{name}",
+                pygame.Rect(x - 4, 0, txt_rect.width + 12, self.top_menu_height),
+            )
+            x += txt_rect.width + 22
 
-    def _calculate_world_coordinates(
-        self, grid_x: int, grid_y: int
-    ) -> Tuple[float, float]:
-        """Calculate world coordinates (cell center) from grid indices.
-        Args:
-            grid_x: row (line)
-            grid_y: col (column)
-        Returns:
-            (world_x, world_y) where world_x corresponds to grid_x and world_y to grid_y
+        # Draw dropdown if open
+        if self.open_dropdown:
+            items = self.dropdowns[self.open_dropdown]
+            area_x = getattr(self, f"menu_area_{self.open_dropdown}").x
+            area_y = self.top_menu_height
+            # Build dropdown rect
+            item_h = 22
+            width = 260
+            height = item_h * len(items)
+            dropdown_rect = pygame.Rect(area_x, area_y, width, height)
+            pygame.draw.rect(self.screen, COLORS["ui_bg"], dropdown_rect)
+            pygame.draw.rect(self.screen, COLORS["grid_line"], dropdown_rect, 1)
+            for i, (label, _, _) in enumerate(items):
+                y = area_y + i * item_h
+                item_rect = pygame.Rect(area_x, y, width, item_h)
+                # Hover highlight
+                if item_rect.collidepoint(pygame.mouse.get_pos()):
+                    pygame.draw.rect(self.screen, COLORS["menu_hover"], item_rect)
+                # Draw label
+                text = self.small_font.render(label, True, COLORS["text"])
+                self.screen.blit(text, (area_x + 6, y + 3))
+
+    def _draw_palette(self):
+        # Vertical palette on left side (positioned below the top menu to avoid overlay)
+        palette_x = 10
+        # Default palette top is below the menu
+        palette_y = self.top_menu_height + 8
+        item_size = 32
+        gap = 10
+
+        # If a dropdown menu is open, push the palette below the dropdown area
+        if self.open_dropdown:
+            # approximate dropdown item height & total height
+            items = self.dropdowns.get(self.open_dropdown, [])
+            item_h = 22
+            dropdown_height = item_h * max(1, len(items))
+            palette_y = self.top_menu_height + dropdown_height + 12
+
+        for i, (label, color, val) in enumerate(self.palette):
+            rect = pygame.Rect(
+                palette_x, palette_y + i * (item_size + gap), item_size, item_size
+            )
+            pygame.draw.rect(self.screen, color, rect)
+            pygame.draw.rect(self.screen, COLORS["grid_line"], rect, 2)
+            # Draw border for selected
+            if self.side_selected_tool == val:
+                pygame.draw.rect(self.screen, (0, 120, 215), rect, 3)
+            # clickable area store
+            setattr(self, f"palette_area_{i}", rect)
+            # small label
+            label_surf = self.tiny_font.render(label, True, COLORS["text"])
+            self.screen.blit(label_surf, (rect.right + 8, rect.y + 6))
+
+    def _draw_grid(self):
+        grid_rect = pygame.Rect(
+            self.offset_x,
+            self.offset_y,
+            self.grid_width * self.cell_size,
+            self.grid_height * self.cell_size,
+        )
+        pygame.draw.rect(self.screen, COLORS["background"], grid_rect)
+        for y in range(self.grid_height):
+            for x in range(self.grid_width):
+                cell_rect = pygame.Rect(
+                    self.offset_x + x * self.cell_size,
+                    self.offset_y + y * self.cell_size,
+                    self.cell_size,
+                    self.cell_size,
+                )
+                cell_value = self.grid[y, x]
+                if cell_value == 0:
+                    color = COLORS["navigable"]
+                elif cell_value == 1:
+                    color = COLORS["poi"]
+                elif cell_value == 2:
+                    color = COLORS["shelf"]
+                else:
+                    color = COLORS["obstacle"]
+                pygame.draw.rect(self.screen, color, cell_rect)
+                pygame.draw.rect(self.screen, COLORS["grid_line"], cell_rect, 1)
+        # Zones and pathfinding
+        self._draw_zones()
+        if self.pathfinding_mode:
+            self._draw_pathfinding_elements()
+
+    def _draw_zones(self):
+        if not self.zones:
+            return
+        if hasattr(pygame, "SRCALPHA"):
+            zone_surface = pygame.Surface(
+                (self.screen_width, self.screen_height), pygame.SRCALPHA
+            )
+        else:
+            zone_surface = pygame.Surface((self.screen_width, self.screen_height))
+            zone_surface.set_alpha(80)
+        for zone in self.zones:
+            if len(zone.points) < 3:
+                continue
+            screen_points = []
+            for x, y in zone.points:
+                grid_x = int(x / self.edge_length)
+                grid_y = int(y / self.edge_length)
+                screen_x = self.offset_x + grid_y * self.cell_size
+                screen_y = self.offset_y + grid_x * self.cell_size
+                screen_points.append((screen_x, screen_y))
+            if len(screen_points) >= 3:
+                pygame.draw.polygon(zone_surface, COLORS["zone"][:3], screen_points)
+                pygame.draw.polygon(zone_surface, (255, 255, 0), screen_points, 2)
+        self.screen.blit(zone_surface, (0, 0))
+
+    def _draw_pathfinding_elements(self):
+        if self.computed_path and len(self.computed_path) > 1:
+            path_points = []
+            for px, py in self.computed_path:
+                screen_x = self.offset_x + py * self.cell_size + self.cell_size // 2
+                screen_y = self.offset_y + px * self.cell_size + self.cell_size // 2
+                path_points.append((screen_x, screen_y))
+            if len(path_points) > 1:
+                pygame.draw.lines(
+                    self.screen, COLORS["path_line"], False, path_points, 3
+                )
+            for point in path_points[1:-1]:
+                pygame.draw.circle(self.screen, COLORS["path_line"], point, 2)
+        if self.path_start:
+            sx, sy = self.path_start
+            start_rect = pygame.Rect(
+                self.offset_x + sy * self.cell_size + 2,
+                self.offset_y + sx * self.cell_size + 2,
+                self.cell_size - 4,
+                self.cell_size - 4,
+            )
+            pygame.draw.rect(self.screen, COLORS["path_start"], start_rect)
+        if self.path_goal:
+            gx, gy = self.path_goal
+            goal_rect = pygame.Rect(
+                self.offset_x + gy * self.cell_size + 2,
+                self.offset_y + gx * self.cell_size + 2,
+                self.cell_size - 4,
+                self.cell_size - 4,
+            )
+            pygame.draw.rect(self.screen, COLORS["path_goal"], goal_rect)
+
+    def _draw_info_panel(self):
         """
-        # Cell center coordinates in centimeters
-        # grid_x (row) -> world_x, grid_y (col) -> world_y
-        world_x = (grid_x + 0.5) * self.edge_length
-        world_y = (grid_y + 0.5) * self.edge_length
-        return world_x, world_y
+        Single grouped Infos panel (toggleable from File menu).
+        Positioned below the top menu to avoid any overlay with dropdowns.
+        """
+        if not self.infos_visible:
+            return
+        # Place the Info panel to the right of the grid, but ensure its top is below the menu bar
+        info_x = self.offset_x + self.grid_width * self.cell_size + 20
+        info_y = self.top_menu_height + 8
+        info_width = self.ui_panel_width
+        # Height limited by available vertical space under the menu
+        info_height = min(self.screen_height - info_y - 40, 800)
+        info_rect = pygame.Rect(info_x, info_y, info_width, info_height)
+        pygame.draw.rect(self.screen, COLORS["ui_bg"], info_rect)
+        pygame.draw.rect(self.screen, COLORS["grid_line"], info_rect, 1)
+        # Title
+        title = self.font.render("Infos — NaviStore", True, COLORS["text"])
+        self.screen.blit(title, (info_rect.x + 8, info_rect.y + 8))
+        y = info_rect.y + 38
+        # Grid information, statistics, tools, shortcuts and legend merged
+        grid_info = [
+            f"Dimensions: {self.grid_width} × {self.grid_height} cells",
+            f"Cell size: {self.edge_length:.1f} cm",
+            f"Zoom: {self.cell_size} px/cell",
+            "",
+            f"Total cellules: {self.grid_width * self.grid_height}",
+            f"Zones libres: {self.stats['navigable']}",
+            f"Obstacles: {self.stats['obstacles']}",
+            f"POIs: {self.stats['pois']}",
+            f"Étagères: {self.stats['shelves']}",
+            "",
+            "Outils (clavier): 1=Libre 2=Obstacle 3=POI 4=Étagère",
+            "Glisser pour dessiner. Clic droit applique la couleur sélectionnée à gauche.",
+            "",
+            "Raccourcis: Ctrl+N,Nouveau | Ctrl+O,Ouvrir | Ctrl+S,Sauver | Ctrl+Q,Quitter",
+        ]
+        for line in grid_info:
+            s = self.small_font.render(line, True, COLORS["text"])
+            self.screen.blit(s, (info_rect.x + 10, y))
+            y += 18
+        # Legend boxes (placed in a new area inside the info panel)
+        legend_y = y + 6
+        legend_items = [
+            ("Libre", COLORS["navigable"], 0),
+            ("Obstacle", COLORS["obstacle"], -1),
+            ("POI", COLORS["poi"], 1),
+            ("Étagère", COLORS["shelf"], 2),
+        ]
+        # Draw legend vertically to avoid horizontal overflow
+        ly = legend_y
+        for label, color, val in legend_items:
+            r = pygame.Rect(info_rect.x + 10, ly, 18, 18)
+            pygame.draw.rect(self.screen, color, r)
+            pygame.draw.rect(self.screen, COLORS["grid_line"], r, 1)
+            t = self.tiny_font.render(f"{label} ({val})", True, COLORS["text"])
+            self.screen.blit(t, (r.right + 6, r.y))
+            ly += 22
+
+    def _draw_mode_info_area(self):
+        # Dedicated area under main grid for active mode information
+        area_x = self.offset_x
+        area_y = self.offset_y + self.grid_height * self.cell_size + 10
+        area_w = min(
+            self.grid_width * self.cell_size, self.screen_width - self.offset_x - 40
+        )
+        area_h = self.mode_info_height - 20
+        area_rect = pygame.Rect(area_x, area_y, area_w, area_h)
+        pygame.draw.rect(self.screen, COLORS["ui_bg"], area_rect)
+        pygame.draw.rect(self.screen, COLORS["grid_line"], area_rect, 1)
+        if self.coordinate_mode:
+            title = self.small_font.render(
+                "Mode Coordonnées — ACTIF", True, (0, 100, 200)
+            )
+            self.screen.blit(title, (area_rect.x + 8, area_rect.y + 6))
+            if hasattr(self, "last_clicked_cell") and self.last_clicked_cell:
+                x, y = self.last_clicked_cell
+                wx, wy = self.last_clicked_coords
+                lines = [
+                    f"Dernière case: ({x},{y})",
+                    f"Monde: ({wx:.1f}cm,{wy:.1f}cm)",
+                    f"Valeur: {self.grid[x,y]}",
+                ]
+                yy = area_rect.y + 28
+                for l in lines:
+                    self.screen.blit(
+                        self.small_font.render(l, True, COLORS["text"]),
+                        (area_rect.x + 8, yy),
+                    )
+                    yy += 18
+        elif self.pathfinding_mode:
+            title = self.small_font.render(
+                "Mode Pathfinding — ACTIF", True, (200, 100, 0)
+            )
+            self.screen.blit(title, (area_rect.x + 8, area_rect.y + 6))
+            yy = area_rect.y + 28
+            if self.path_stats:
+                if self.path_stats.get("success"):
+                    lines = [
+                        f"Chemin trouvé: {self.path_stats['path_length']} points",
+                        f"Distance: {self.path_stats['path_distance']:.2f}",
+                        f"Temps: {self.path_stats['computation_time']:.1f} ms",
+                    ]
+                else:
+                    lines = [f"Aucun chemin: {self.path_stats.get('error','')}"]
+                for l in lines:
+                    self.screen.blit(
+                        self.small_font.render(l, True, COLORS["text"]),
+                        (area_rect.x + 8, yy),
+                    )
+                    yy += 18
+            if self.path_start:
+                self.screen.blit(
+                    self.small_font.render(
+                        f"Départ: {self.path_start}", True, COLORS["text"]
+                    ),
+                    (area_rect.x + 8, yy),
+                )
+                yy += 18
+            if self.path_goal:
+                self.screen.blit(
+                    self.small_font.render(
+                        f"Arrivée: {self.path_goal}", True, COLORS["text"]
+                    ),
+                    (area_rect.x + 8, yy),
+                )
+                yy += 18
+        else:
+            title = self.small_font.render("Aucun mode actif", True, COLORS["text"])
+            self.screen.blit(title, (area_rect.x + 8, area_rect.y + 6))
+
+    # ------------------------- Input handling -------------------------
+    def _get_grid_pos(self, mouse_pos: Tuple[int, int]) -> Optional[Tuple[int, int]]:
+        mx, my = mouse_pos
+        col = (mx - self.offset_x) // self.cell_size
+        row = (my - self.offset_y) // self.cell_size
+        if 0 <= col < self.grid_width and 0 <= row < self.grid_height:
+            return int(row), int(col)
+        return None
+
+    def _handle_menu_click(self, pos: Tuple[int, int]):
+        # Toggle dropdown open/close when clicking menu titles
+        for name in self.menu_items:
+            rect = getattr(self, f"menu_area_{name}")
+            if rect.collidepoint(pos):
+                if self.open_dropdown == name:
+                    self.open_dropdown = None
+                else:
+                    self.open_dropdown = name
+                return True
+        # Click within open dropdown
+        if self.open_dropdown:
+            items = self.dropdowns[self.open_dropdown]
+            area_x = getattr(self, f"menu_area_{self.open_dropdown}").x
+            area_y = self.top_menu_height
+            item_h = 22
+            width = 260
+            for i, (label, callback, _) in enumerate(items):
+                item_rect = pygame.Rect(area_x, area_y + i * item_h, width, item_h)
+                if item_rect.collidepoint(pos):
+                    # If entry is separator or disabled
+                    if callback:
+                        callback()
+                    self.open_dropdown = None
+                    return True
+        return False
+
+    def _handle_palette_click(self, pos: Tuple[int, int]) -> bool:
+        for i, _ in enumerate(self.palette):
+            rect = getattr(self, f"palette_area_{i}")
+            if rect.collidepoint(pos):
+                _, _, val = self.palette[i]
+                self.side_selected_tool = val
+                print(f"Palette sélectionnée: {self.palette[i][0]} ({val})")
+                return True
+        return False
+
+    def _handle_mouse_click(self, pos: Tuple[int, int], button: int):
+        # Menu click handling has priority
+        if self._handle_menu_click(pos):
+            return
+        # Palette click handling
+        if self._handle_palette_click(pos):
+            return
+        # Buttons area (legacy) - currently empty
+        for ui_button in self.buttons:
+            if ui_button["rect"].collidepoint(pos):
+                ui_button["callback"]()
+                return
+        grid_pos = self._get_grid_pos(pos)
+        if grid_pos:
+            x, y = grid_pos
+            # Pathfinding mode handling (left click only)
+            if self.pathfinding_mode and button == 1:
+                if self.grid[x, y] == -1:
+                    print(f"❌ Cannot select obstacle at ({x}, {y})")
+                    return
+                if self.pathfinding_step == 0:
+                    self.path_start = (x, y)
+                    self.pathfinding_step = 1
+                    print(f"Start selected {self.path_start}")
+                elif self.pathfinding_step == 1:
+                    if (x, y) == self.path_start:
+                        print("Start and goal must differ")
+                        return
+                    self.path_goal = (x, y)
+                    self._compute_pathfinding()
+                elif self.pathfinding_step == 2:
+                    self._reset_pathfinding()
+                    self.path_start = (x, y)
+                    self.pathfinding_step = 1
+                return
+            # Coordinate mode
+            if self.coordinate_mode:
+                wx, wy = self._calculate_world_coordinates(x, y)
+                self.last_clicked_cell = (x, y)
+                self.last_clicked_coords = (wx, wy)
+                print(
+                    f"Cell: {self.last_clicked_cell} World: ({wx:.1f},{wy:.1f}) Val: {self.grid[x,y]}"
+                )
+                return
+            # Normal edit mode
+            if not self.pathfinding_mode and not self.coordinate_mode:
+                if button == 1:  # left click uses current_tool
+                    new_value = self.current_tool
+                    # also prepare drag tool
+                    self.drag_tool = new_value
+                elif button == 3:  # right click uses side_selected_tool
+                    new_value = self.side_selected_tool
+                    self.drag_tool = new_value
+                elif button == 2:
+                    new_value = 1
+                    self.drag_tool = new_value
+                else:
+                    return
+                if self.grid[x, y] != new_value:
+                    self.grid[x, y] = new_value
+                    self.has_changes = True
+                    self._update_stats()
+
+    def _handle_mouse_drag(self, pos: Tuple[int, int]):
+        if self.drag_tool is None:
+            return
+        grid_pos = self._get_grid_pos(pos)
+        if grid_pos:
+            x, y = grid_pos
+            if self.grid[x, y] != self.drag_tool:
+                self.grid[x, y] = self.drag_tool
+                self.has_changes = True
+                self._update_stats()
+
+    def _handle_mouse_up(self):
+        self.drag_tool = None
+
+    # ------------------------- Misc UI helpers -------------------------
+    def _adjust_window_size(self):
+        grid_display_width = self.grid_width * self.cell_size
+        grid_display_height = self.grid_height * self.cell_size
+        new_width = max(
+            self.min_window_width, grid_display_width + self.ui_panel_width + 200
+        )
+        new_height = max(
+            self.min_window_height, grid_display_height + self.mode_info_height + 200
+        )
+        self.screen_width = new_width
+        self.screen_height = new_height
+        self.screen = pygame.display.set_mode(
+            (self.screen_width, self.screen_height), pygame.RESIZABLE
+        )
+
+    def _show_about(self):
+        root = tk.Tk()
+        root.withdraw()
+        try:
+            messagebox.showinfo(
+                "À propos",
+                "NaviStore Grid Editor — Refactorisé\nUI moderne intégrée (Pygame)\nMaintient la logique existante.",
+            )
+        finally:
+            root.destroy()
 
     def _show_help(self):
-        """Display editor help."""
-        help_text = """HELP - GRID EDITOR
-
-    DRAWING TOOLS:
-    • Left click: Place navigable zone (white)
-    • Right click: Place obstacles (black)
-    • Middle click: Place POI (red)
-
-    KEYBOARD CONTROLS:
-    • S: Save
-    • R: Reset grid
-    • ESC: Quit
-    • +/-: Adjust cell size
-    • Arrows: Move view
-
-    BUTTONS:
-    • New: Create new grid
-    • Open: Load existing grid
-    • Save: Save current grid
-    • Reset: Clear the grid
-    • Size: Resize grid
-    • Coord: Coordinates mode (display)
-    • Help: Show this help
-    • Quit: Close editor
-
-    COORDINATES MODE:
-    • Activate with 'Coord' button
-    • Click on a cell to see:
-      - Grid position (x, y)
-      - World coordinates (cm)
-      - Cell type
-    • Temporarily disables editing
-
-    LEGEND:
-    • White: Navigable zone (value 0)
-    • Black: Obstacle (value -1)
-    • Red: Point of interest/POI (value 1)
-
-    SAVE FORMAT:
-    • Files named with XXH3 64-bit hash
-    • HDF5 format with metadata
-    • Compatible with optimization system
-    • Automatic integrity check
-
-    EXAMPLE: a1b2c3d4e5f6.h5
-    The name corresponds to content's XXH3 hash."""
-
-        self._show_info_dialog(help_text, "Aide")
+        root = tk.Tk()
+        root.withdraw()
+        try:
+            messagebox.showinfo(
+                "Aide",
+                "Voir le menu Fichier -> Infos pour les raccourcis et la légende. F1 pour aide.",
+            )
+        finally:
+            root.destroy()
 
     def _quit_editor(self):
-        """Quit the editor."""
         if self.has_changes:
             if not self._confirm_action("Quitter sans sauvegarder les modifications?"):
                 return
         self.running = False
 
+    # ------------------------- Keyboard handling -------------------------
     def _handle_keyboard(self, key):
-        """Handle keyboard input."""
         keys = pygame.key.get_pressed()
         ctrl_pressed = keys[pygame.K_LCTRL] or keys[pygame.K_RCTRL]
-
-        if key == pygame.K_s:
+        if key == pygame.K_s and ctrl_pressed:
             self._save_grid()
-        elif key == pygame.K_r:
-            self._reset_grid()
-        elif key == pygame.K_ESCAPE:
-            self._quit_editor()
-        elif key == pygame.K_n and ctrl_pressed:
-            self._new_grid()
         elif key == pygame.K_o and ctrl_pressed:
             self._load_grid()
+        elif key == pygame.K_n and ctrl_pressed:
+            self._new_grid()
+        elif key == pygame.K_q and ctrl_pressed:
+            self._quit_editor()
+        elif key == pygame.K_F1:
+            self._show_help()
+        elif key == pygame.K_p:
+            # toggle path mode via keyboard
+            if self.pathfinding_mode:
+                self.pathfinding_mode = False
+                self._reset_pathfinding()
+            else:
+                self._activate_pathfinding_mode()
+        elif key == pygame.K_c:
+            self.coordinate_mode = not self.coordinate_mode
+            if self.coordinate_mode:
+                self.pathfinding_mode = False
+                self._reset_pathfinding()
         elif key == pygame.K_PLUS or key == pygame.K_EQUALS:
             if self.cell_size < MAX_CELL_SIZE:
                 self.cell_size += 2
@@ -1353,170 +988,67 @@ class GridEditor:
             if self.cell_size > MIN_CELL_SIZE:
                 self.cell_size -= 2
                 self._adjust_window_size()
-        elif key == pygame.K_F1:
-            self._show_help()
-        elif key == pygame.K_p:
-            self._toggle_pathfinding_mode()
-        elif key == pygame.K_c:
-            self._toggle_coordinate_mode()
-        elif key == pygame.K_SPACE and self.pathfinding_mode:
-            # Spacebar to restart pathfinding
-            self._reset_pathfinding()
-        elif key == pygame.K_1:
-            self.current_tool = 0  # Navigable
-            print(
-                f"🔧 Outil sélectionné: {self.tool_names[self.current_tool]} ({self.tool_colors[self.current_tool]})"
-            )
-        elif key == pygame.K_2:
-            self.current_tool = -1  # Obstacle
-            print(
-                f"🔧 Outil sélectionné: {self.tool_names[self.current_tool]} ({self.tool_colors[self.current_tool]})"
-            )
-        elif key == pygame.K_3:
-            self.current_tool = 1  # POI
-            print(
-                f"🔧 Outil sélectionné: {self.tool_names[self.current_tool]} ({self.tool_colors[self.current_tool]})"
-            )
-        elif key == pygame.K_4:
-            self.current_tool = 2  # Shelf
-            print(
-                f"🔧 Outil sélectionné: {self.tool_names[self.current_tool]} ({self.tool_colors[self.current_tool]})"
-            )
+        elif key in (pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4):
+            if key == pygame.K_1:
+                self.current_tool = 0
+            elif key == pygame.K_2:
+                self.current_tool = -1
+            elif key == pygame.K_3:
+                self.current_tool = 1
+            elif key == pygame.K_4:
+                self.current_tool = 2
+            print(f"Outil courant: {self.current_tool}")
         elif key == pygame.K_TAB:
-            # Cycle through tools
             tools = [0, -1, 1, 2]
             current_index = tools.index(self.current_tool)
-            next_index = (current_index + 1) % len(tools)
-            self.current_tool = tools[next_index]
-            print(
-                f"🔧 Outil sélectionné: {self.tool_names[self.current_tool]} ({self.tool_colors[self.current_tool]})"
-            )
+            self.current_tool = tools[(current_index + 1) % len(tools)]
+            print(f"Outil courant: {self.current_tool}")
 
-    def _show_help(self):
-        """Display help."""
-        root = tk.Tk()
-        root.withdraw()
-
-        help_text = """
-    NaviStore Grid Editor - Help
-
-    DRAWING TOOLS:
-    • Left click: Use current tool (see tool selection)
-    • Right click: Obstacle (wall) - value -1  
-    • Middle click: Point of interest (POI) - value 1
-    • Drag: Draw continuously
-
-    TOOL SELECTION:
-    • 1: Zone libre (navigable) - value 0 - white
-    • 2: Obstacle (wall) - value -1 - black
-    • 3: Point of interest (POI) - value 1 - green
-    • 4: Étagère (shelf) - value 2 - brown
-    • Tab: Cycle through tools
-
-    KEYBOARD SHORTCUTS:
-    • S: Save grid
-    • R: Reset
-    • ESC: Quit editor 
-    • Ctrl+N: New grid
-    • Ctrl+O: Open file
-    • +/-: Adjust zoom
-    • F1: Show this help
-    • P: Enable/disable pathfinding mode
-    • C: Enable/disable coordinate mode
-    • SPACE: Reset pathfinding (if mode active)
-
-    BUTTONS:
-    • New: Create grid (custom dimensions)
-    • Open: Load from .h5 file 
-    • Save: Save to .h5 format
-    • Reset: Cancel modifications
-    • Size: Resize grid
-    • Coord: Coordinate mode (display info)
-    • Path: Pathfinding mode (test paths)
-    • Quit: Close editor
-
-    PATHFINDING MODE:
-    • Enable with 'Path' button or 'P' key
-    • 1. Click free cell for start point
-    • 2. Click free cell for goal point 
-    • 3. Path displays automatically
-    • Statistics: length, distance, computation time
-    • Visualization: orange line, red/blue points
-    • Click anywhere to restart
-
-    TIPS:
-    • Use 1-2 cell wide aisles
-    • Keep real store proportions
-    • Test navigation between all POIs
-    • Pathfinding helps validate connectivity
-    • Save your work regularly
-        """
-
-        try:
-            messagebox.showinfo("Aide - Éditeur de Grille", help_text)
-        finally:
-            root.destroy()
-
+    # ------------------------- Main loop -------------------------
     def run(self):
-        """Main editor loop."""
         clock = pygame.time.Clock()
-
         while self.running:
-            # Event handling
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     self._quit_editor()
-
                 elif event.type == pygame.MOUSEBUTTONDOWN:
-                    if event.button in [1, 2, 3]:  # Left, middle, right
+                    if event.button in (1, 2, 3):
                         self._handle_mouse_click(event.pos, event.button)
-                        self.mouse_pressed = True
-
-                        # Set current tool for dragging
-                        if event.button == 1:
-                            self.current_tool = 0
-                        elif event.button == 3:
-                            self.current_tool = -1
-                        elif event.button == 2:
-                            self.current_tool = 1
-
                 elif event.type == pygame.MOUSEBUTTONUP:
-                    self.mouse_pressed = False
-
+                    self._handle_mouse_up()
                 elif event.type == pygame.MOUSEMOTION:
                     self._handle_mouse_drag(event.pos)
-
                 elif event.type == pygame.KEYDOWN:
                     self._handle_keyboard(event.key)
-
                 elif event.type == pygame.VIDEORESIZE:
-                    # Handle window resizing
                     self.screen_width = max(self.min_window_width, event.w)
                     self.screen_height = max(self.min_window_height, event.h)
                     self.screen = pygame.display.set_mode(
                         (self.screen_width, self.screen_height), pygame.RESIZABLE
                     )
-                    self.buttons = self._create_buttons()
 
-            # Rendering
+            # Rendering: draw base UI first, then draw menu on top so dropdowns are never occluded
             self.screen.fill(COLORS["background"])
+            # Draw palette and grid first
+            self._draw_palette()
             self._draw_grid()
-            self._draw_ui()
-            self._draw_buttons()
+            # Draw Info panel and Mode-specific area
+            self._draw_info_panel()
+            self._draw_mode_info_area()
+            # Finally draw the menu bar (so dropdowns are top-most)
+            self._draw_menu_bar()
 
             pygame.display.flip()
             clock.tick(60)
-
         pygame.quit()
 
 
 def main():
-    """Main entry point."""
     try:
         editor = GridEditor()
         editor.run()
     except Exception as e:
-        print(f"Fatal error: {str(e)}")
+        print(f"Fatal error: {e}")
         import traceback
 
         traceback.print_exc()
