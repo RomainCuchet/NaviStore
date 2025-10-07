@@ -1185,6 +1185,19 @@ class GridEditor:
             self.offset_y -= 40
             self._clamp_offsets()
 
+        if key in (
+            pygame.K_0,
+            pygame.K_KP0,
+        ):  # 0 for obstacle instead of 1 in interface, easier
+            self.current_tool = -1  # obstacle
+            self.side_selected_tool = -1
+        elif key in (pygame.K_1, pygame.K_KP1):
+            self.current_tool = 1  # POI
+            self.side_selected_tool = 1
+        elif key in (pygame.K_2, pygame.K_KP2):
+            self.current_tool = 2  # étagère
+            self.side_selected_tool = 2
+
     # ------------------------- Main loop -------------------------
     def run(self):
         clock = pygame.time.Clock()
