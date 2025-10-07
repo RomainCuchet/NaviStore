@@ -154,6 +154,9 @@ class GridEditor:
         self.pan_start_mouse = (0, 0)
         self.pan_start_offset = (0, 0)
 
+        self.keys_held = set()
+        self.key_repeat_speed = 5  # pixels per frame
+
         # Modes
         self.coordinate_mode = False
         self.pathfinding_mode = False
@@ -186,6 +189,7 @@ class GridEditor:
                 ("Quitter 	 Ctrl+Q", self._quit_editor, (pygame.K_q, True)),
             ],
             "Mode": [
+                ("Edition", self._activate_movement_mode, None),
                 ("Coordonnées", self._activate_coordinate_mode, None),
                 ("Pathfinding", self._activate_pathfinding_mode, None),
             ],
@@ -498,6 +502,11 @@ class GridEditor:
     # ------------------------- Mode activation helpers -------------------------
     def _activate_coordinate_mode(self):
         self.coordinate_mode = True
+        self.pathfinding_mode = False
+        self._reset_pathfinding()
+
+    def _activate_movement_mode(self):
+        self.coordinate_mode = False
         self.pathfinding_mode = False
         self._reset_pathfinding()
 
@@ -1193,7 +1202,13 @@ class GridEditor:
                 elif event.type == pygame.MOUSEWHEEL:
                     self._handle_mouse_wheel(event)
                 elif event.type == pygame.KEYDOWN:
+                    self.keys_held.add(event.key)
                     self._handle_keyboard(event.key)
+
+                elif event.type == pygame.KEYUP:
+                    if event.key in self.keys_held:
+                        self.keys_held.remove(event.key)
+
                 elif event.type == pygame.VIDEORESIZE:
                     self.screen_width = max(self.min_window_width, event.w)
                     self.screen_height = max(self.min_window_height, event.h)
@@ -1213,6 +1228,23 @@ class GridEditor:
             self._draw_mode_info_area()
             # Finally draw the menu bar (so dropdowns are top-most)
             self._draw_menu_bar()
+
+            # Continuous key hold movement
+            if pygame.K_LEFT in self.keys_held:
+                self.offset_x += self.key_repeat_speed
+            if pygame.K_RIGHT in self.keys_held:
+                self.offset_x -= self.key_repeat_speed
+            if pygame.K_UP in self.keys_held:
+                self.offset_y += self.key_repeat_speed
+            if pygame.K_DOWN in self.keys_held:
+                self.offset_y -= self.key_repeat_speed
+
+            self.offset_x = min(
+                max(self.offset_x, self.min_offset_x), self.max_offset_x
+            )
+            self.offset_y = min(
+                max(self.offset_y, self.min_offset_y), self.max_offset_y
+            )
 
             pygame.display.flip()
             clock.tick(60)
