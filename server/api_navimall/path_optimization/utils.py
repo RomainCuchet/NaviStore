@@ -6,6 +6,7 @@ import h5py
 import numpy as np
 import json
 import os
+import xxhash
 from typing import Tuple, Optional, List, Dict, Any
 import logging
 
@@ -100,6 +101,25 @@ def load_layout_from_h5(h5_filename: str) -> Tuple[np.ndarray, float, Dict[str, 
         raise ValueError(f"Error reading HDF5 file {h5_filename}: {str(e)}")
 
 
+def calculate_layout_hash(grid: np.ndarray, edge_length: float) -> str:
+    """
+    Calculate a unique hash for a grid layout.
+
+    Args:
+        grid: 2D numpy array representing the grid
+        edge_length: Edge length of grid cells
+
+    Returns:
+        Hexadecimal string representation of the hash
+    """
+    # Convert grid to bytes and hash it along with edge_length
+    grid_bytes = grid.astype(np.uint8).tobytes()
+    edge_bytes = str(edge_length).encode("utf-8")
+    combined_data = grid_bytes + edge_bytes
+
+    return xxhash.xxh3_64(combined_data).hexdigest()
+
+
 def save_layout_to_h5(
     h5_filename: str,
     layout: np.ndarray,
@@ -143,6 +163,69 @@ def save_layout_to_h5(
 
     except Exception as e:
         raise ValueError(f"Error saving HDF5 file {h5_filename}: {str(e)}")
+
+
+def save_grid_with_metadata(
+    grid: np.ndarray,
+    edge_length: float,
+    zones: Dict[str, Zone] = None,
+    output_dir: str = "server/assets",
+    filename_prefix: str = "map_layout",
+    include_timestamp: bool = True,
+) -> Tuple[str, str]:
+    """
+    Save grid with metadata using the same process as the grid editor.
+
+    Args:
+        grid: 2D numpy array representing the grid
+        edge_length: Edge length of grid cells in cm
+        zones: Dictionary of zone objects (optional)
+        output_dir: Directory to save the file
+        filename_prefix: Prefix for the filename
+        include_timestamp: Whether to include timestamp in filename
+
+    Returns:
+        Tuple of (filepath, layout_hash)
+    """
+    import datetime
+
+    # Calculate layout hash
+    layout_hash = calculate_layout_hash(grid, edge_length)
+
+    # Generate filename
+    if include_timestamp:
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"{filename_prefix}_{timestamp}.h5"
+    else:
+        filename = f"{filename_prefix}.h5"
+
+    # Ensure output directory exists
+    os.makedirs(output_dir, exist_ok=True)
+    filepath = os.path.join(output_dir, filename)
+
+    # Save the layout
+    save_layout_to_h5(
+        h5_filename=filepath,
+        layout=grid,
+        edge_length=edge_length,
+        zones=zones or {},
+        layout_hash=layout_hash,
+    )
+
+    # Add hash as attribute for compatibility with grid editor
+    with h5py.File(filepath, "a") as f:
+        f.attrs["layout_hash"] = layout_hash
+        f.attrs["created_with"] = "NaviStore Automatic Grid Generator"
+
+    # Log save information
+    logger.info(f"Grid saved to: {filepath}")
+    logger.info(f"Grid shape: {grid.shape}")
+    logger.info(f"Edge length: {edge_length} cm")
+    logger.info(f"Layout hash: {layout_hash}")
+    if zones:
+        logger.info(f"Zones saved: {len(zones)}")
+
+    return filepath, layout_hash
 
 
 def get_cell_type_info() -> Dict[int, Dict[str, Any]]:

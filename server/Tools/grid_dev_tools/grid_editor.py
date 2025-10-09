@@ -29,7 +29,6 @@ from typing import Tuple, Optional, List
 import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog
 import json
-import xxhash
 import time
 
 # Pathfinding imports (kept as before)
@@ -42,6 +41,8 @@ try:
     from api_navimall.path_optimization.utils import (
         load_layout_from_h5,
         save_layout_to_h5,
+        save_grid_with_metadata,
+        calculate_layout_hash,
         Zone,
     )
 
@@ -68,7 +69,7 @@ COLORS = {
     # Pathfinding colors
     "path_start": (255, 0, 0),
     "path_goal": (0, 0, 255),
-    "path_line": (255, 165, 0),
+    "path_line": (255, 0, 0),  # Changed to red
 }
 
 # Defaults
@@ -155,7 +156,9 @@ class GridEditor:
         self.pan_start_offset = (0, 0)
 
         self.keys_held = set()
-        self.key_repeat_speed = 5  # pixels per frame
+        self.base_key_repeat_speed = (
+            5  # base pixels per frame (when cell_size == DEFAULT_CELL_SIZE)
+        )
 
         # Modes
         self.coordinate_mode = False
@@ -230,12 +233,7 @@ class GridEditor:
         }
 
     def _calculate_layout_hash(self) -> str:
-        grid_bytes = self.grid.astype(np.int8).tobytes()
-        edge_length_bytes = np.array([self.edge_length], dtype=np.float64).tobytes()
-        combined_data = grid_bytes + edge_length_bytes
-        hasher = xxhash.xxh3_64()
-        hasher.update(combined_data)
-        return hasher.hexdigest()
+        return calculate_layout_hash(self.grid, self.edge_length)
 
     def _calculate_world_coordinates(
         self, grid_x: int, grid_y: int
@@ -544,9 +542,17 @@ class GridEditor:
                 algorithm=self.pathfinding_algorithm,
                 diagonal_movement=True,
             )
+
+            # Indicate calculation is starting
+            print(
+                f"🔍 Calcul A* en cours... (algorithme: {self.pathfinding_algorithm.upper()})"
+            )
+
             start_time = time.time()
             path = solver.find_path(self.path_start, self.path_goal)
             computation_time = time.time() - start_time
+
+            print(f"⏱️ Calcul terminé en {computation_time*1000:.2f} ms")
             euclidean_dist = np.sqrt(
                 (self.path_goal[0] - self.path_start[0]) ** 2
                 + (self.path_goal[1] - self.path_start[1]) ** 2
@@ -734,11 +740,13 @@ class GridEditor:
                 screen_y = self.offset_y + px * self.cell_size + self.cell_size // 2
                 path_points.append((screen_x, screen_y))
             if len(path_points) > 1:
+                # Draw path with thicker red line for better visibility
                 pygame.draw.lines(
-                    self.screen, COLORS["path_line"], False, path_points, 3
+                    self.screen, COLORS["path_line"], False, path_points, 5
                 )
+            # Draw path points as larger red circles
             for point in path_points[1:-1]:
-                pygame.draw.circle(self.screen, COLORS["path_line"], point, 2)
+                pygame.draw.circle(self.screen, COLORS["path_line"], point, 3)
         if self.path_start:
             sx, sy = self.path_start
             start_rect = pygame.Rect(
@@ -861,9 +869,11 @@ class GridEditor:
             if self.path_stats:
                 if self.path_stats.get("success"):
                     lines = [
+                        f"Algorithme: {self.path_stats['algorithm']}",
                         f"Chemin trouvé: {self.path_stats['path_length']} points",
                         f"Distance: {self.path_stats['path_distance']:.2f}",
-                        f"Temps: {self.path_stats['computation_time']:.1f} ms",
+                        f"Temps de calcul: {self.path_stats['computation_time']:.2f} ms",
+                        f"Efficacité: {self.path_stats['efficiency_ratio']:.2f}x",
                     ]
                 else:
                     lines = [f"Aucun chemin: {self.path_stats.get('error','')}"]
@@ -1069,6 +1079,18 @@ class GridEditor:
             self.min_offset_y = y - (grid_h - h)
             self.max_offset_y = y
 
+    def _get_zoom_adjusted_speed(self) -> float:
+        """Calculate movement speed proportional to zoom level.
+
+        Returns faster movement when zoomed out (small cell_size) and
+        slower movement when zoomed in (large cell_size).
+        """
+        # Speed inversely proportional to zoom level
+        # When cell_size is small (zoomed out), speed is higher
+        # When cell_size is large (zoomed in), speed is lower
+        zoom_factor = DEFAULT_CELL_SIZE / self.cell_size
+        return max(1.0, self.base_key_repeat_speed * zoom_factor)
+
     # ------------------------- Misc UI helpers -------------------------
     def _adjust_window_size(self):
         grid_display_width = self.grid_width * self.cell_size
@@ -1173,16 +1195,16 @@ class GridEditor:
             self.current_tool = tools[(current_index + 1) % len(tools)]
             print(f"Outil courant: {self.current_tool}")
         elif key == pygame.K_LEFT:
-            self.offset_x += 40
+            self.offset_x += self._get_zoom_adjusted_speed()
             self._clamp_offsets()
         elif key == pygame.K_RIGHT:
-            self.offset_x -= 40
+            self.offset_x -= self._get_zoom_adjusted_speed()
             self._clamp_offsets()
         elif key == pygame.K_UP:
-            self.offset_y += 40
+            self.offset_y += self._get_zoom_adjusted_speed()
             self._clamp_offsets()
         elif key == pygame.K_DOWN:
-            self.offset_y -= 40
+            self.offset_y -= self._get_zoom_adjusted_speed()
             self._clamp_offsets()
 
         if key in (
@@ -1242,15 +1264,16 @@ class GridEditor:
             # Finally draw the menu bar (so dropdowns are top-most)
             self._draw_menu_bar()
 
-            # Continuous key hold movement
+            # Continuous key hold movement with zoom-adjusted speed
+            speed = self._get_zoom_adjusted_speed()
             if pygame.K_LEFT in self.keys_held:
-                self.offset_x += self.key_repeat_speed
+                self.offset_x += speed
             if pygame.K_RIGHT in self.keys_held:
-                self.offset_x -= self.key_repeat_speed
+                self.offset_x -= speed
             if pygame.K_UP in self.keys_held:
-                self.offset_y += self.key_repeat_speed
+                self.offset_y += speed
             if pygame.K_DOWN in self.keys_held:
-                self.offset_y -= self.key_repeat_speed
+                self.offset_y -= speed
 
             self.offset_x = min(
                 max(self.offset_x, self.min_offset_x), self.max_offset_x
