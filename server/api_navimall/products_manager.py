@@ -1,6 +1,9 @@
 import json
 from anyio import Path
 from collections import defaultdict
+import random
+
+from api_navimall.path_optimization.utils import load_layout_from_h5
 
 
 class ProductsManager:
@@ -154,3 +157,51 @@ class ProductsManager:
                 categories.add(product["category"])
         self.__update_data_store("categories", list(categories))
         return categories
+
+    def set_test_positions(self, layout_path):
+
+        def random_position(free_cells):
+
+            for product in self.products:
+                pos = random.choice(free_cells)
+                if pos:
+                    product["position"] = pos
+            print(
+                f"Assigned random positions to {len(self.products)} products in the layout."
+            )
+
+        def by_category():
+            pass  # TODO: implement this method later
+
+        layout, edge_length, _ = load_layout_from_h5(layout_path)
+        layout_height, layout_width = layout.shape
+
+        free_cells = []
+        for i in range(layout_height):
+            for j in range(layout_width):
+                if layout[i, j] == 0:
+                    # Check all adjacent cells (up, down, left, right)
+                    for di, dj in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+                        ni, nj = i + di, j + dj
+                        if (
+                            0 <= ni < layout_height
+                            and 0 <= nj < layout_width
+                            and layout[ni, nj] == 2
+                        ):
+                            free_cells.append((i, j))
+                            break
+
+        if not free_cells:
+            raise ValueError("No free cells available for product placement.")
+
+        random_position(free_cells)
+
+        # Convert grid positions to real-world coordinates (in cm)
+        for product in self.products:
+            if "position" in product:
+                i, j = product["position"]
+                real_x = (j + 0.5) * edge_length
+                real_y = (i + 0.5) * edge_length
+                product["position"] = (real_x, real_y)
+
+        self.__save_products()
