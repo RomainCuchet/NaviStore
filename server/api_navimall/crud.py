@@ -6,10 +6,21 @@ import logging
 from typing import Optional
 from elasticsearch import Elasticsearch, helpers, ConnectionError, ConnectionTimeout
 from api_navimall.config import ES_HOST, ES_INDEX
+import time
 
-# Configuration du logging
+from api_navimall.crud_path_optimization import (
+    _upload_store_layout,
+    _get_layout_status,
+    _optimize_shopping_path,
+    _validate_poi_placement,
+    _get_pathfinding_algorithms,
+)
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+es: Optional[Elasticsearch] = None
 
 
 def wait_for_elasticsearch(
@@ -43,16 +54,16 @@ def wait_for_elasticsearch(
 
     while time.time() - start_time < max_wait_time:
         try:
-            # Créer le client Elasticsearch avec la bonne configuration
+            # Create Elasticsearch client with proper configuration
             es = Elasticsearch(
                 hosts=[host], request_timeout=5, max_retries=1, retry_on_timeout=True
             )
 
-            # Test de ping simple
+            # simple ping test
             if es.ping():
                 logger.info(f"🏥 Ping OK - Vérification de la santé du cluster...")
 
-                # Vérification de la santé du cluster
+                # check  cluster health
                 try:
                     health = es.cluster.health(timeout="10s")
                     status = health.get("status", "unknown")
@@ -80,7 +91,7 @@ def wait_for_elasticsearch(
         except Exception as e:
             logger.warning(f"⚠️ Erreur inattendue (tentative {attempt}): {e}")
 
-        # Attendre avant la prochaine tentative
+        # wait before next attempt
         elapsed = time.time() - start_time
         remaining = max_wait_time - elapsed
 
@@ -99,16 +110,15 @@ def wait_for_elasticsearch(
 
         time.sleep(wait_interval)
 
-        # Augmenter l'intervalle avec backoff exponentiel
+        # Increase interval with exponential backoff
         wait_interval = min(wait_interval * backoff_factor, max_interval)
         attempt += 1
 
     raise ConnectionError(f"Elasticsearch non disponible après {max_wait_time}s")
 
 
-# Initialisation avec attente optimisée
-logger.info("🚀 Initialisation de la connexion Elasticsearch...")
-es = wait_for_elasticsearch()
+if es is None:
+    es = wait_for_elasticsearch()
 
 
 def get_elasticsearch_health() -> dict:
@@ -173,18 +183,6 @@ def ensure_elasticsearch_connection() -> bool:
         return False
 
 
-def create_index_if_missing():
-    """Create the index with mapping if it doesn't exist."""
-    if not es.indices.exists(index=ES_INDEX).body:
-        with open("api_navimall/assets/json/es_mapping.json", "r") as f:
-            mapping = json.load(f)
-        es.indices.create(index=ES_INDEX, body=mapping)
-        print(f"✅ Index '{ES_INDEX}' created with mapping.")
-        reindex_products()
-    else:
-        print(f"ℹ️ Index '{ES_INDEX}' already exists, skipping creation.")
-
-
 def reindex_products():
     """Delete existing docs and load products from products.json into Elasticsearch."""
     try:
@@ -203,6 +201,18 @@ def reindex_products():
         print(f"✅ {len(products)} products reindexed into '{ES_INDEX}'")
     except FileNotFoundError:
         print("⚠️ products.json file not found, no products indexed")
+
+
+def create_index_if_missing():
+    """Create the index with mapping if it doesn't exist."""
+    if not es.indices.exists(index=ES_INDEX).body:
+        with open("api_navimall/assets/json/es_mapping.json", "r") as f:
+            mapping = json.load(f)
+        es.indices.create(index=ES_INDEX, body=mapping)
+        print(f"✅ Index '{ES_INDEX}' created with mapping.")
+        reindex_products()
+    else:
+        print(f"ℹ️ Index '{ES_INDEX}' already exists, skipping creation.")
 
 
 def __get_products(
@@ -312,11 +322,3 @@ def __get_product_categories():
     except Exception as e:
         print(f"Error fetching product categories: {e}")
         return []
-
-
-create_index_if_missing()
-
-# TODO: Dirty solution to reset the index during development to match changes in products.json. Implement a better strategy later to prevent Downtime.
-reindex_products()
-
-# We could also use delete index in developer mode using : `Invoke-RestMethod -Method Delete -Uri "http://localhost:9200/products"`

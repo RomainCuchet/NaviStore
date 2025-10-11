@@ -1,5 +1,9 @@
 server/api_navimall/tools/
 server/api_navimall/navistore_server-venv/
+server/api_navimall/assets/svg_outputs/
+server/api_navimall/assets/cache/
+server/api_navimall/assets/layouts/
+server/api_navimall/assets/grid_outputs/
 server/assets/
 server/tests/
 

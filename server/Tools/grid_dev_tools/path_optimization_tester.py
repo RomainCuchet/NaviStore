@@ -537,10 +537,10 @@ class PathOptimizationTester:
         # 4. Setup display
         self.setup_display()
 
-        # 5. Upload layout
-        if not self.call_upload_layout_api(file_path):
-            print("❌ Impossible d'uploader la grille")
-            return
+        # XXX: TO Upload layout, uncomment if you'd like to run on different layouts
+        # if not self.call_upload_layout_api(file_path):
+        #     print("❌ Impossible d'uploader la grille")
+        #     return
 
         # 6. Optimiser chemin
         optimal_path = self.call_optimize_path_api()

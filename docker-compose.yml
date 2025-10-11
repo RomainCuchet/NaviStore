@@ -14,6 +14,8 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+    volumes:
+      - store_assets:/server/assets
 
   es:
     image: docker.elastic.co/elasticsearch/elasticsearch:9.1.3
@@ -29,3 +31,6 @@ services:
       timeout: 10s
       retries: 5
       start_period: 20s
+
+volumes:
+  store_assets:
