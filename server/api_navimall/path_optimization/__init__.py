@@ -10,7 +10,7 @@ from .store_layout_manager import StoreLayoutManager
 from .pathfinding_solver import PathfindingSolver, PathfindingSolverFactory
 from .tsp_solver import TSPSolver
 from .final_path_generator import FinalPathGenerator
-from .utils import load_layout_from_h5, save_hash_to_json, load_hash_from_json
+from .utils import load_layout_from_h5, save_hash_to_json, load_hash_from_json, Zone
 
 __all__ = [
     "StoreLayoutManager",
@@ -22,4 +22,5 @@ __all__ = [
     "load_layout_from_h5",
     "save_hash_to_json",
     "load_hash_from_json",
+    "Zone",
 ]

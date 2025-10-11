@@ -31,6 +31,8 @@ from api_navimall.crud import (
     _get_layout_status,
     _validate_poi_placement,
     _get_pathfinding_algorithms,
+    _get_current_layout_hash,
+    _get_current_layout_svg,
 )
 from api_navimall.models import PathOptimizationRequest, PathOptimizationResponse
 
@@ -72,3 +74,13 @@ async def validate_poi_placement(
 @router.get("/pathfinding_algorithms")
 async def get_pathfinding_algorithms(user_info: dict = Depends(verify_api_key)):
     return _get_pathfinding_algorithms(user_info)
+
+
+@router.get("/layout_hash")
+async def get_current_layout_hash(user_info: dict = Depends(verify_api_key)):
+    return _get_current_layout_hash(user_info)
+
+
+@router.get("/layout_svg")
+async def get_current_layout_svg(user_info: dict = Depends(verify_api_key)):
+    return _get_current_layout_svg(user_info)

@@ -14,6 +14,8 @@ from api_navimall.crud_path_optimization import (
     _optimize_shopping_path,
     _validate_poi_placement,
     _get_pathfinding_algorithms,
+    _get_current_layout_hash,
+    _get_current_layout_svg,
 )
 
 logging.basicConfig(level=logging.INFO)

@@ -1,3 +1,5 @@
 assets/*.html
+api_navimall/assets/grid_outputs/
+api_navimall/assets/svg_output/
 navistore_server-venv/
 products_images/

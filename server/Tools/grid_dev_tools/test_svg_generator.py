@@ -10,7 +10,7 @@ import glob
 # Add parent directories to path
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
 
-from api_navimall.path_optimization.utils import (
+from api_navimall.layout_svg_generator import (
     LayoutSVGGenerator,
     generate_svg_from_h5,
 )
@@ -20,7 +20,7 @@ def test_svg_generation():
     """Test SVG generation with available .h5 files"""
 
     # Look for .h5 files in assets directory
-    assets_dir = "../../api_navimall/assets"
+    assets_dir = "../../"
     h5_files = glob.glob(os.path.join(assets_dir, "*.h5"))
 
     if not h5_files:
@@ -73,7 +73,7 @@ def test_custom_generator():
     """Test using LayoutSVGGenerator class directly with custom settings"""
 
     # Look for a specific layout file
-    test_file = "../../api_navimall/assets/6f0f94d5ad19adb2.h5"
+    test_file = "../../default_layout.h5"
 
     if not os.path.exists(test_file):
         print(f"❌ Test file not found: {test_file}")

@@ -1286,6 +1286,26 @@ class GridEditor:
             clock.tick(60)
         pygame.quit()
 
+    @classmethod
+    def with_path(cls, grid=None, edge_length=None, path=None):
+        """
+        Crée une nouvelle instance de GridEditor avec un chemin à afficher et le mode actif.
+        """
+        instance = cls()
+        if grid is not None:
+            instance.grid = grid.copy()
+            instance.grid_height, instance.grid_width = grid.shape
+        if edge_length is not None:
+            instance.edge_length = edge_length
+        if path:
+            instance.show_path(path)
+        return instance
+
+    def close_path_mode(self):
+        """
+        Désactive le mode d'affichage du chemin (le chemin disparaît).
+        """
+        self.show_path(None)
 
 def main():
     try:
