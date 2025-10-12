@@ -1,3 +1,4 @@
+
 # 🛒 Navimall – Smarter In-Store Navigation
 
 Shopping in a large retail store can quickly become a frustrating experience. Customers often waste time searching for familiar products, wandering through aisles without clear direction, and leaving with a sense of confusion. As a result, many shoppers prefer smaller or already familiar stores — limiting the potential of large retail environments.
@@ -7,10 +8,6 @@ The app provides real-time product locations, generates an optimized route to co
 
 👉 For customers: a faster, smoother, and more enjoyable shopping experience.
 👉 For retailers: a powerful tool to improve customer satisfaction, streamline store navigation, and boost engagement with larger retail spaces.
-
---
-
-
 
 ## Elastic Search
 Elastic Search is a powerful distributed search engine that perfectly suits our project's needs for several reasons:
@@ -33,7 +30,7 @@ It’s optimized for inclusion in an API documentation site or README — concis
 The **Path Optimization Pipeline** computes the most efficient multi-point navigation routes in complex environments.
 It combines **graph-based pathfinding** (A*, Dijkstra, Best-First) with **Traveling Salesman Problem (TSP)** optimization (Google OR-Tools) to generate minimal-distance routes through all Points of Interest (POIs). Enables to compute the best shopping path within the store layout.
 
-![Shopping path simulation](https://i.imgur.com/xEi6ycx.png)
+![Shopping path simulation](https://i.imgur.com/GevMQ2x.png)
 *Demo of the Path Optimization Pipeline*
 
 **Highlights**
