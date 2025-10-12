@@ -5,6 +5,7 @@ Handles store layout upload, POI coordinates, and optimal path computation.
 """
 
 from fastapi import APIRouter, Depends, UploadFile, File
+from fastapi.responses import FileResponse
 import logging
 
 from api_navimall.auth import verify_api_key, verify_write_rights
@@ -32,7 +33,8 @@ from api_navimall.crud import (
     _validate_poi_placement,
     _get_pathfinding_algorithms,
     _get_current_layout_hash,
-    _get_current_layout_svg,
+    _get_current_layout_svg_infos,
+    _get_current_layout_svg_file,
 )
 from api_navimall.models import PathOptimizationRequest, PathOptimizationResponse
 
@@ -81,6 +83,11 @@ async def get_current_layout_hash(user_info: dict = Depends(verify_api_key)):
     return _get_current_layout_hash(user_info)
 
 
-@router.get("/layout_svg")
+@router.get("/layout_svg_infos")
 async def get_current_layout_svg(user_info: dict = Depends(verify_api_key)):
-    return _get_current_layout_svg(user_info)
+    return _get_current_layout_svg_infos(user_info)
+
+
+@router.get("/layout_svg", response_class=FileResponse)
+async def get_current_layout_svg_file(user_info: dict = Depends(verify_api_key)):
+    return _get_current_layout_svg_file(user_info)

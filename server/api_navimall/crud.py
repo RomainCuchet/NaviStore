@@ -15,7 +15,8 @@ from api_navimall.crud_path_optimization import (
     _validate_poi_placement,
     _get_pathfinding_algorithms,
     _get_current_layout_hash,
-    _get_current_layout_svg,
+    _get_current_layout_svg_infos,
+    _get_current_layout_svg_file,
 )
 
 logging.basicConfig(level=logging.INFO)

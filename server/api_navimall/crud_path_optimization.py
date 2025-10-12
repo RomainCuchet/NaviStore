@@ -2,6 +2,7 @@
 import logging
 import os
 from fastapi import HTTPException, UploadFile
+from fastapi.responses import FileResponse
 
 from api_navimall.models import PathOptimizationRequest, PathOptimizationResponse
 from api_navimall.path_optimization import (
@@ -41,9 +42,24 @@ def _get_current_layout_hash(user_info: dict):
     return StoreLayoutManager.get_current_layout_hash_info()
 
 
-def _get_current_layout_svg(user_info: dict):
+def _get_current_layout_svg_infos(user_info: dict):
     """Return information about the current layout SVG asset."""
     return StoreLayoutManager.get_current_svg_info()
+
+
+def _get_current_layout_svg_file(user_info: dict):
+    """Return the current layout SVG file as a streamed response."""
+    info = StoreLayoutManager.get_current_svg_info()
+    if not info.get("success"):
+        raise HTTPException(
+            status_code=404, detail=info.get("message", "SVG not available")
+        )
+
+    svg_path = info.get("svg_path")
+    if not svg_path or not os.path.exists(svg_path):
+        raise HTTPException(status_code=404, detail="SVG file not found")
+
+    return FileResponse(svg_path, media_type="image/svg+xml")
 
 
 def _get_layout_status(user_info: dict):
