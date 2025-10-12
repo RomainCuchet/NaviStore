@@ -1,0 +1,37 @@
+name: namer_app
+description: A new Flutter project.
+
+publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+
+version: 0.0.1+1
+
+environment:
+  sdk: '>=2.19.4 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+  path_provider: ^2.1.5
+  flutter_dotenv: ^6.0.0
+  
+  http: ^1.2.2
+  shared_preferences: ^2.2.2
+
+  english_words: ^4.0.0
+  provider: ^6.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  hive_generator: ^2.0.1
+  build_runner: ^2.4.6
+
+  flutter_lints: ^2.0.0
+
+flutter:
+  assets:
+    - assets/icons/
+    - .env
+  uses-material-design: true
