@@ -1,6 +1,9 @@
 import 'package:hive/hive.dart';
+
 import '../models/product_model.dart';
 import '../models/shopping_list_model.dart';
+import '../models/product_categories_model.dart';
+
 import '../services/product_api_service.dart';
 
 class ProductApiSyncService {
@@ -8,14 +11,29 @@ class ProductApiSyncService {
 
   ProductApiSyncService(this.api);
 
+  /// Load and synchronize the locally stored product categories with the API
+  Future<void> syncProductCategories() async {
+    try {
+      final categories = await api.fetchCategories();
+      final categoriesModel = ProductCategoriesModel(
+        productCategories: categories,
+      );
+      await ProductCategoriesModel.saveToHive(categoriesModel);
+    } catch (e) {
+      print("❌Error syncing product categories (Api disconnected ?): $e");
+    }
+  }
+
   /// Load and synchronize all locally stored products with the API
-  Future<void> syncProducts(List<ShoppingListModel> lists) async {
+  Future<void> syncProducts() async {
     final allProductsBox = await Hive.openBox<ProductModel>('products');
+    final allListsBox = await Hive.openBox<ShoppingListModel>('shopping_lists');
 
     final storedProducts = allProductsBox.values.toList();
 
     // Get all product IDs used in the lists
-    final allIdsInLists = lists.expand((l) => l.productIds).toSet();
+    final allIdsInLists =
+        allListsBox.values.expand((l) => l.productIds).toSet();
 
     try {
       // Fetch only the products that are in the lists
@@ -42,9 +60,7 @@ class ProductApiSyncService {
         }
       }
     } catch (e) {
-      print(e);
-      print(
-          "❌ API offline or error, existing products will remain with isAvailable = false");
+      print("❌Error syncing products (Api disconnected ?): $e");
       for (var stored in storedProducts) {
         if (allIdsInLists.contains(stored.id)) {
           final updated = stored.copyWith(isAvailable: false);
@@ -52,5 +68,10 @@ class ProductApiSyncService {
         }
       }
     }
+  }
+
+  Future<void> fullResync() async {
+    await syncProductCategories();
+    await syncProducts();
   }
 }

@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../../models/product_model.dart';
-import '../../services/product_api_service.dart';
-import '../../repositories/shopping_list_repository.dart';
 import '../../models/shopping_list_model.dart';
+import '../../models/product_categories_model.dart';
+
+import '../../services/product_api_service.dart';
+
+import '../../repositories/shopping_list_repository.dart';
+
 import '../cards/product_detail_card_browse.dart';
 import '../cards/product_list_card_browse.dart';
 
@@ -22,6 +27,9 @@ class _BrowseProductsPageState extends State<BrowseProductsPage> {
   String searchQuery = "";
   String? selectedCategory;
 
+  ProductCategoriesModel categories =
+      ProductCategoriesModel(productCategories: []);
+
   bool isLoadingCategories = true;
 
   bool isLoading = false;
@@ -30,6 +38,13 @@ class _BrowseProductsPageState extends State<BrowseProductsPage> {
   @override
   void initState() {
     super.initState();
+    ProductCategoriesModel.getFromHive().then((categories) {
+      setState(() {
+        this.categories = categories;
+      }); // si tu veux rafraîchir l’UI
+    }).catchError((err) {
+      print("Erreur : $err");
+    });
   }
 
   Future<void> loadProducts() async {
@@ -189,8 +204,8 @@ class _BrowseProductsPageState extends State<BrowseProductsPage> {
                 Autocomplete<String>(
                   optionsBuilder: (textEditingValue) {
                     if (textEditingValue.text.isEmpty)
-                      return context.read()<List<String>>();
-                    return context.read<List<String>>().where((cat) => cat
+                      return categories.productCategories;
+                    return categories.productCategories.where((cat) => cat
                         .toLowerCase()
                         .contains(textEditingValue.text.toLowerCase()));
                   },

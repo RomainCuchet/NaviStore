@@ -15,16 +15,19 @@ class LayoutModel extends HiveObject {
     required this.layoutSvg,
   });
 
+  /// Save the single object to Hive (overwrite if exists)
   static Future<void> saveToHive(LayoutModel layout) async {
     var box = await Hive.openBox<LayoutModel>('layout');
-    await box.put('current', layout);
+    await box.put('single', layout);
   }
 
+  /// Retrieve the single object from Hive
   static Future<LayoutModel?> getFromHive() async {
     var box = await Hive.openBox<LayoutModel>('layout');
-    return box.get('current');
+    return box.get('single');
   }
 
+  /// Delete the single object from Hive
   static Future<void> deleteFromHive() async {
     var box = await Hive.openBox<LayoutModel>('layout');
     await box.clear();

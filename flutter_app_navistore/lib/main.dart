@@ -27,9 +27,7 @@ Future<void> main() async {
   Hive.registerAdapter(ShoppingListModelAdapter());
   Hive.registerAdapter(LayoutModelAdapter());
 
-  // Ouvre les boxes Hive
-  final shoppingListsBox =
-      await Hive.openBox<ShoppingListModel>('shopping_lists');
+  await Hive.openBox<ShoppingListModel>('shopping_lists');
   await Hive.openBox<ProductModel>('products');
 
   // Create the API services
@@ -43,25 +41,18 @@ Future<void> main() async {
   );
 
   // Synchronize products at startup
-  final syncService = ProductApiSyncService(productApiService);
-  final allLists = shoppingListsBox.values.toList();
-  await syncService.syncProducts(allLists);
+  final productSyncService = ProductApiSyncService(productApiService);
+  await productSyncService.fullResync();
 
   // Synchronize layout at startup
   final layoutSyncService = LayoutApiSyncService(api: layoutApiService);
   await layoutSyncService.syncLayout();
-
-  final productCategories = await productApiService.fetchCategories();
-  productCategories.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
 
   runApp(
     MultiProvider(
       providers: [
         Provider<ProductApiService>.value(value: productApiService),
         Provider<LayoutApiService>.value(value: layoutApiService),
-        Provider<List<String>>.value(
-            value:
-                productCategories), // only works as long as there isn't another List<String> provider
         ChangeNotifierProvider(create: (_) => MyAppState()),
       ],
       child: MyApp(),
