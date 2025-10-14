@@ -16,6 +16,7 @@ import 'widgets/pages/browse_products_page.dart';
 import 'models/product_model.dart';
 import 'models/shopping_list_model.dart';
 import 'models/layout_model.dart';
+import 'models/product_categories_model.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -26,9 +27,11 @@ Future<void> main() async {
   Hive.registerAdapter(ProductModelAdapter());
   Hive.registerAdapter(ShoppingListModelAdapter());
   Hive.registerAdapter(LayoutModelAdapter());
+  Hive.registerAdapter(ProductCategoriesModelAdapter());
 
   await Hive.openBox<ShoppingListModel>('shopping_lists');
   await Hive.openBox<ProductModel>('products');
+  await Hive.openBox<ProductCategoriesModel>('product_categories');
 
   // Create the API services
   final productApiService = ProductApiService(
