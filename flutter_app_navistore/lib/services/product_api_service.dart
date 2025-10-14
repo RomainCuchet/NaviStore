@@ -9,7 +9,7 @@ class ProductApiService {
   ProductApiService({required this.baseUrl, required this.apiKey});
 
   Map<String, String> get _headers => {
-        'x-api-key': apiKey, // seulement la clé API
+        'x-api-key': apiKey,
       };
 
   Future<List<ProductModel>> getProducts({
@@ -23,10 +23,7 @@ class ProductApiService {
       if (category != null && category.isNotEmpty) 'category': category,
     });
 
-    final response = await http.get(uri, headers: {
-      'x-api-key': apiKey,
-      'Accept': 'application/json',
-    });
+    final response = await http.get(uri, headers: _headers);
 
     if (response.statusCode != 200) {
       throw Exception('Failed to load products: ${response.statusCode}');

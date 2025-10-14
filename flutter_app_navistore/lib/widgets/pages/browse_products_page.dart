@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../models/product_model.dart';
 import '../../services/product_api_service.dart';
 import '../../repositories/shopping_list_repository.dart';
@@ -7,9 +8,9 @@ import '../cards/product_detail_card_browse.dart';
 import '../cards/product_list_card_browse.dart';
 
 class BrowseProductsPage extends StatefulWidget {
-  final ProductApiService api;
+  final ProductApiService productService;
 
-  const BrowseProductsPage({super.key, required this.api});
+  const BrowseProductsPage({super.key, required this.productService});
 
   @override
   State<BrowseProductsPage> createState() => _BrowseProductsPageState();
@@ -21,7 +22,6 @@ class _BrowseProductsPageState extends State<BrowseProductsPage> {
   String searchQuery = "";
   String? selectedCategory;
 
-  List<String> availableCategories = [];
   bool isLoadingCategories = true;
 
   bool isLoading = false;
@@ -30,21 +30,6 @@ class _BrowseProductsPageState extends State<BrowseProductsPage> {
   @override
   void initState() {
     super.initState();
-    _loadCategories();
-  }
-
-  Future<void> _loadCategories() async {
-    setState(() => isLoadingCategories = true);
-    try {
-      final categories = await widget.api.fetchCategories();
-      categories.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
-      setState(() => availableCategories = categories);
-    } catch (e) {
-      print("❌ Failed to load categories: $e");
-      setState(() => availableCategories = []);
-    } finally {
-      setState(() => isLoadingCategories = false);
-    }
   }
 
   Future<void> loadProducts() async {
@@ -63,7 +48,8 @@ class _BrowseProductsPageState extends State<BrowseProductsPage> {
     });
 
     try {
-      final fetched = await widget.api.getProducts(title: searchQuery);
+      final fetched =
+          await widget.productService.getProducts(title: searchQuery);
       setState(() {
         allResults = fetched;
         _applyFilters();
@@ -203,8 +189,8 @@ class _BrowseProductsPageState extends State<BrowseProductsPage> {
                 Autocomplete<String>(
                   optionsBuilder: (textEditingValue) {
                     if (textEditingValue.text.isEmpty)
-                      return availableCategories;
-                    return availableCategories.where((cat) => cat
+                      return context.read()<List<String>>();
+                    return context.read<List<String>>().where((cat) => cat
                         .toLowerCase()
                         .contains(textEditingValue.text.toLowerCase()));
                   },

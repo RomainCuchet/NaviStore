@@ -1,9 +1,9 @@
 
-# 🛒 Navimall – Smarter In-Store Navigation
+# 🛒 NaviStore – Smarter In-Store Navigation
 
 Shopping in a large retail store can quickly become a frustrating experience. Customers often waste time searching for familiar products, wandering through aisles without clear direction, and leaving with a sense of confusion. As a result, many shoppers prefer smaller or already familiar stores — limiting the potential of large retail environments.
 
-Navimall removes that friction.
+NaviStore removes that friction.
 The app provides real-time product locations, generates an optimized route to complete your shopping list efficiently, and alerts you to product availability.
 
 👉 For customers: a faster, smoother, and more enjoyable shopping experience.
@@ -23,7 +23,7 @@ It’s optimized for inclusion in an API documentation site or README — concis
 
 ---
 
-## Path Optimization Pipeline
+## Path Optimization
 
 ### Overview
 
@@ -31,14 +31,14 @@ The **Path Optimization Pipeline** computes the most efficient multi-point navig
 It combines **graph-based pathfinding** (A*, Dijkstra, Best-First) with **Traveling Salesman Problem (TSP)** optimization (Google OR-Tools) to generate minimal-distance routes through all Points of Interest (POIs). Enables to compute the best shopping path within the store layout.
 
 ![Shopping path simulation](https://i.imgur.com/GevMQ2x.png)
-*Demo of the Path Optimization Pipeline*
+*Demo of the Path Optimization simulator*
 
 **Highlights**
 
 * Supports A*, Dijkstra, and Best-First algorithms
 * TSP solving via Google OR-Tools with greedy fallback
 * Real-world coordinate mapping → grid representation
-* A* fallback for missing paths
+* Distance threshold filtering and A* fallback for missing paths
 * Built-in caching and performance optimizations
 * Full REST API integration
 
@@ -145,6 +145,8 @@ Its flexible algorithm selection, caching, and robust fallback logic make it ide
 
 ## Implementation Notes
 - To delete index in developer mode: `Invoke-RestMethod -Method Delete -Uri "http://localhost:9200/products"`
+- Run to reaload Hive's models in flutter : `flutter packages pub run build_runner build --delete-conflicting-outputs`
+
 
 ## Setup during developpement
 - Launch docker desktop

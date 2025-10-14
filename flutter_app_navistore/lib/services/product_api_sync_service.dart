@@ -8,22 +8,23 @@ class ProductApiSyncService {
 
   ProductApiSyncService(this.api);
 
-  /// Charge et synchronise tous les produits stockés localement avec l'API
+  /// Load and synchronize all locally stored products with the API
   Future<void> syncProducts(List<ShoppingListModel> lists) async {
     final allProductsBox = await Hive.openBox<ProductModel>('products');
 
     final storedProducts = allProductsBox.values.toList();
 
-    // Récupère tous les IDs des produits utilisés dans les listes
+    // Get all product IDs used in the lists
     final allIdsInLists = lists.expand((l) => l.productIds).toSet();
 
     try {
-      // Appel API avec List<String>
+      // Fetch only the products that are in the lists
       final fetchedProducts =
           await api.getProductsByIds(allIdsInLists.toList());
 
       final fetchedMap = {for (var p in fetchedProducts) p.id: p};
 
+      // Update availability of all stored products according to fetched data
       for (var stored in storedProducts) {
         if (fetchedMap.containsKey(stored.id)) {
           final updated = fetchedMap[stored.id]!.copyWith(isAvailable: true);
@@ -34,20 +35,16 @@ class ProductApiSyncService {
         }
       }
 
-      for (var p in fetchedProducts) {
-        if (!storedProducts.any((sp) => sp.id == p.id)) {
-          await p.saveToHive();
-        }
-      }
-
+      // Remove products that are no longer in any list
       for (var stored in storedProducts) {
         if (!allIdsInLists.contains(stored.id)) {
           await stored.deleteFromHive();
         }
       }
     } catch (e) {
+      print(e);
       print(
-          "❌ API offline, les produits existants restent avec isAvailable = false");
+          "❌ API offline or error, existing products will remain with isAvailable = false");
       for (var stored in storedProducts) {
         if (allIdsInLists.contains(stored.id)) {
           final updated = stored.copyWith(isAvailable: false);
