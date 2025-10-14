@@ -248,7 +248,6 @@ class LayoutSVGGenerator:
         shelf_shapes = self._find_contiguous_regions(layout_array, 2)
         logger.info(f"🏪 Found {len(shelf_shapes)} shelf regions")
         for i, shape in enumerate(shelf_shapes):
-            logger.info(f"   Shelf {i}: {len(shape)} cells")
             gradient_id = "shelfGradient" if i % 2 == 0 else "shelfGradient2"
             self._create_contiguous_shelf(
                 layers["shelves"], shape, edge_length, i, gradient_id
@@ -716,6 +715,9 @@ class LayoutSVGGenerator:
         """Save SVG to file with proper formatting."""
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
+        # Remove unsupported elements for Flutter rendering
+        self._strip_unsupported_elements(svg_root)
+
         # Convert to string with pretty formatting
         rough_string = ET.tostring(svg_root, "unicode")
         reparsed = minidom.parseString(rough_string)
@@ -727,6 +729,16 @@ class LayoutSVGGenerator:
 
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(formatted_xml)
+
+    def _strip_unsupported_elements(self, svg_root: ET.Element) -> None:
+        """Remove SVG elements not supported by flutter_svg (<style>, <script>)."""
+        unsupported_tags = {"style", "script"}
+
+        for parent in svg_root.iter():
+            for child in list(parent):
+                tag_name = child.tag.split("}")[-1].lower()
+                if tag_name in unsupported_tags:
+                    parent.remove(child)
 
     def _generate_metadata(
         self,
