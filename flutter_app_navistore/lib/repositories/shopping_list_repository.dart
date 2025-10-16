@@ -79,8 +79,31 @@ class ShoppingListsRepository {
     }
   }
 
-  static Future<List<ShoppingListModel>> getshowInOtherViewLists() async {
+  /// fetch lists where showInOtherView is true
+  static Future<List<ShoppingListModel>> fetchMapLists() async {
     final box = Hive.box<ShoppingListModel>('shopping_lists');
     return box.values.where((list) => list.showInOtherView).toList();
+  }
+
+  /// fetch all products in the lists where showInOtherView is true
+  static Future<List<ProductModel>> fetchMapProducts() async {
+    final lists = await fetchMapLists();
+    final productIds = lists.expand((list) => list.productIds).toSet();
+
+    final productsBox = Hive.box<ProductModel>('products');
+    return productsBox.values
+        .where((product) => productIds.contains(product.id))
+        .toList();
+  }
+
+  /// Fetch the position of all products in the lists where showInOtherView is true
+  static Future<List<List<double?>>> fetchProductPositions() async {
+    final products = await fetchMapProducts();
+    final positions = <List<double?>>[];
+
+    for (var product in products) {
+      positions.add(product.position?.map((e) => e as double?).toList() ?? []);
+    }
+    return positions;
   }
 }

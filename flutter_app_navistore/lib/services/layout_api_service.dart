@@ -41,16 +41,26 @@ class LayoutApiService {
     return response.body;
   }
 
-  Future<Map<String, dynamic>> optimizePath(
-      List<Map<String, double>> poiList) async {
-    final uri = Uri.parse('${baseUrl}/path_optimization/optimize_path');
+  Future<Map<String, dynamic>> optimizePath({
+    required List<List<double?>> poiCoordinates,
+    double distanceThreshold = 5000,
+    int maxRuntime = 10,
+    bool includeReturnToStart = true,
+  }) async {
+    final uri = Uri.parse('$baseUrl/path_optimization/optimize_path');
 
     final body = jsonEncode({
-      'poi_list': poiList,
+      'poi_coordinates': poiCoordinates,
+      'distance_threshold': distanceThreshold,
+      'max_runtime': maxRuntime,
+      'include_return_to_start': includeReturnToStart,
     });
 
-    final response = await http.post(uri,
-        headers: {..._headers, 'Content-Type': 'application/json'}, body: body);
+    final response = await http.post(
+      uri,
+      headers: {..._headers, 'Content-Type': 'application/json'},
+      body: body,
+    );
 
     if (response.statusCode != 200) {
       throw Exception('Failed to optimize path: ${response.statusCode}');
@@ -60,8 +70,8 @@ class LayoutApiService {
 
     if (decoded is Map<String, dynamic>) {
       return {
+        'success': decoded['success'],
         'total_distance': decoded['total_distance'],
-        'computation_time': decoded['computation_time'],
         'complete_path': decoded['complete_path'],
       };
     } else {

@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+
 import '../../models/shopping_list_model.dart';
+
 import '../../repositories/shopping_list_repository.dart';
+
 import '../cards/shopping_list_card.dart';
 
 class ShoppingListsPage extends StatefulWidget {

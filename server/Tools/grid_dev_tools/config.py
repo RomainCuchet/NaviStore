@@ -20,7 +20,7 @@ VISUAL_CONFIG = {
 
 # Configuration d'optimisation
 OPTIMIZATION_CONFIG = {
-    "distance_threshold": 500,  # Seuil de distance en cm
+    "distance_threshold": 5000,  # Seuil de distance en cm
     "max_runtime": 10,  # Temps max d'optimisation en secondes
     "include_return_to_start": True,  # Retourner au point de départ
 }
