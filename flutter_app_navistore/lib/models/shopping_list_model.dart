@@ -15,10 +15,14 @@ class ShoppingListModel extends HiveObject {
   @HiveField(2)
   final List<String> productIds;
 
+  @HiveField(3)
+  bool showInOtherView;
+
   ShoppingListModel({
     required this.id,
     required this.name,
     required this.productIds,
+    this.showInOtherView = false,
   });
 
   factory ShoppingListModel.fromJson(Map<String, dynamic> json) {
@@ -28,6 +32,7 @@ class ShoppingListModel extends HiveObject {
       productIds: (json['productIds'] as List<dynamic>)
           .map((e) => e.toString())
           .toList(),
+      showInOtherView: json['showInOtherView'] as bool? ?? false,
     );
   }
 
@@ -36,6 +41,7 @@ class ShoppingListModel extends HiveObject {
       'id': id,
       'name': name,
       'productIds': productIds,
+      'showInOtherView': showInOtherView,
     };
   }
 
@@ -72,11 +78,13 @@ class ShoppingListModel extends HiveObject {
   ShoppingListModel copyWith({
     String? name,
     List<String>? productIds,
+    bool? showInOtherView,
   }) {
     return ShoppingListModel(
       id: id,
       name: name ?? this.name,
       productIds: productIds ?? this.productIds,
+      showInOtherView: showInOtherView ?? this.showInOtherView,
     );
   }
 

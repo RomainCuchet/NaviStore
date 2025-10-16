@@ -20,19 +20,22 @@ class ShoppingListModelAdapter extends TypeAdapter<ShoppingListModel> {
       id: fields[0] as String,
       name: fields[1] as String,
       productIds: (fields[2] as List).cast<String>(),
+      showInOtherView: (fields[3] as bool?) ?? false,
     );
   }
 
   @override
   void write(BinaryWriter writer, ShoppingListModel obj) {
     writer
-      ..writeByte(3)
+      ..writeByte(4)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
       ..write(obj.name)
       ..writeByte(2)
-      ..write(obj.productIds);
+      ..write(obj.productIds)
+      ..writeByte(3)
+      ..write(obj.showInOtherView);
   }
 
   @override

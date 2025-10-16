@@ -21,8 +21,8 @@ class BrowseProductsPage extends StatefulWidget {
 }
 
 class _BrowseProductsPageState extends State<BrowseProductsPage> {
-  List<ProductModel> allResults = []; // bruts de l’API
-  List<ProductModel> products = []; // affichés après filtres
+  List<ProductModel> allResults = [];
+  List<ProductModel> filteredResults = [];
   String searchQuery = "";
   String? selectedCategory;
 
@@ -50,7 +50,7 @@ class _BrowseProductsPageState extends State<BrowseProductsPage> {
     if (searchQuery.isEmpty) {
       setState(() {
         allResults = [];
-        products = [];
+        filteredResults = [];
         errorMessage = null;
       });
       return;
@@ -67,12 +67,12 @@ class _BrowseProductsPageState extends State<BrowseProductsPage> {
       setState(() {
         allResults = fetched;
         _applyFilters();
-        if (products.isEmpty) errorMessage = "Aucun produit trouvé";
+        if (filteredResults.isEmpty) errorMessage = "Aucun produit trouvé";
       });
     } catch (e) {
       setState(() {
         allResults = [];
-        products = [];
+        filteredResults = [];
         errorMessage = "Erreur lors de la récupération des produits";
       });
       print("❌ API error: $e");
@@ -92,8 +92,8 @@ class _BrowseProductsPageState extends State<BrowseProductsPage> {
     }
 
     setState(() {
-      products = filtered;
-      errorMessage = products.isEmpty ? "Aucun produit trouvé" : null;
+      filteredResults = filtered;
+      errorMessage = filteredResults.isEmpty ? "Aucun produit trouvé" : null;
     });
   }
 
@@ -135,6 +135,7 @@ class _BrowseProductsPageState extends State<BrowseProductsPage> {
                 id: DateTime.now().millisecondsSinceEpoch.toString(),
                 name: "Nouvelle liste",
                 productIds: [product.id.toString()],
+                showInOtherView: false,
               );
               await repo.addShoppingList(newList);
 
@@ -173,7 +174,7 @@ class _BrowseProductsPageState extends State<BrowseProductsPage> {
                           setState(() {
                             searchQuery = "";
                             allResults = [];
-                            products = [];
+                            filteredResults = [];
                             errorMessage = null;
                           });
                         },
@@ -274,9 +275,9 @@ class _BrowseProductsPageState extends State<BrowseProductsPage> {
                         ),
                       )
                     : ListView.builder(
-                        itemCount: products.length,
+                        itemCount: filteredResults.length,
                         itemBuilder: (_, index) {
-                          final product = products[index];
+                          final product = filteredResults[index];
                           return ProductListCardBrowse(
                             product: product,
                             onTap: () {

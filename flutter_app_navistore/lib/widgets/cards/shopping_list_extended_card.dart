@@ -30,6 +30,7 @@ class _ShoppingListExtendedCardState extends State<ShoppingListExtendedCard> {
     super.initState();
     _nameController = TextEditingController(text: widget.shoppingList.name);
     _loadProducts();
+    _showInOtherView = widget.shoppingList.showInOtherView;
     widget.shoppingList.getPrices().then((value) {
       setState(() {
         totalAvailable = value.$1;
@@ -177,8 +178,15 @@ class _ShoppingListExtendedCardState extends State<ShoppingListExtendedCard> {
                           Switch.adaptive(
                             value: _showInOtherView,
                             activeColor: theme.colorScheme.primary,
-                            onChanged: (val) =>
-                                setState(() => _showInOtherView = val),
+                            onChanged: (val) async {
+                              // update UI immediately
+                              setState(() => _showInOtherView = val);
+                              // persist change to model + Hive
+                              widget.shoppingList.showInOtherView = val;
+                              final repo = ShoppingListsRepository();
+                              await repo
+                                  .updateShoppingList(widget.shoppingList);
+                            },
                           ),
                         ],
                       ),

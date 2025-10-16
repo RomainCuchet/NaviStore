@@ -69,7 +69,7 @@ class ShoppingListsRepository {
     final allProductIdsInLists =
         allLists.expand((list) => list.productIds).toSet();
 
-    final productsBox = await Hive.box<ProductModel>('products');
+    final productsBox = Hive.box<ProductModel>('products');
     final allStoredProducts = productsBox.values.toList();
 
     for (var product in allStoredProducts) {
@@ -77,5 +77,10 @@ class ShoppingListsRepository {
         await productsBox.delete(product.id);
       }
     }
+  }
+
+  static Future<List<ShoppingListModel>> getshowInOtherViewLists() async {
+    final box = Hive.box<ShoppingListModel>('shopping_lists');
+    return box.values.where((list) => list.showInOtherView).toList();
   }
 }
