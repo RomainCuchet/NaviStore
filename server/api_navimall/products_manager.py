@@ -3,7 +3,10 @@ from anyio import Path
 from collections import defaultdict
 import random
 
-from api_navimall.path_optimization.utils import load_layout_from_h5
+from api_navimall.path_optimization.utils import (
+    load_layout_from_h5,
+    grid_to_real_world_coords,
+)
 
 
 class ProductsManager:
@@ -196,12 +199,25 @@ class ProductsManager:
 
         random_position(free_cells)
 
-        # Convert grid positions to real-world coordinates (in cm)
-        for product in self.products:
-            if "position" in product:
+        # Convert grid positions to real-world coordinates (in cm) using utils
+        grid_points = []
+        product_indices = []
+        for idx, product in enumerate(self.products):
+            if "position" in product and product["position"] is not None:
                 i, j = product["position"]
-                real_x = (j + 0.5) * edge_length
-                real_y = (i + 0.5) * edge_length
-                product["position"] = (real_x, real_y)
+                grid_points.append((i, j))
+                product_indices.append(idx)
+
+        if grid_points:
+            import numpy as np
+
+            grid_arr = np.array(grid_points, dtype=float).reshape(-1, 2)
+            # Swap (row, col) -> (col, row) to align real-world x with column index
+            grid_arr_swapped = grid_arr[:, [1, 0]]
+            real_arr_swapped = grid_to_real_world_coords(grid_arr_swapped, edge_length)
+            real_points = real_arr_swapped.tolist()
+
+            for idx, real_pos in zip(product_indices, real_points):
+                self.products[idx]["position"] = tuple(real_pos)
 
         self.__save_products()
