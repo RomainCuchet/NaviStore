@@ -203,15 +203,15 @@ class LayoutSVGGenerator:
         # Obstacles layer
         layers["obstacles"] = ET.SubElement(svg_root, "g", id="obstacles-layer")
 
-        # Shelves layer (initially hidden)
+        # Shelves layer (visible by default - Flutter strips style/script)
         shelves_layer = ET.SubElement(svg_root, "g", id="shelves-layer")
-        shelves_layer.set("opacity", "0")
+        shelves_layer.set("opacity", "1")
         layers["shelves"] = shelves_layer
 
         # POI layer
         layers["poi"] = ET.SubElement(svg_root, "g", id="poi-layer")
 
-        # Zones layer (initially hidden)
+        # Zones layer (initially hidden; can be toggled later if needed)
         zones_layer = ET.SubElement(svg_root, "g", id="zones-layer")
         zones_layer.set("opacity", "0")
         layers["zones"] = zones_layer
