@@ -54,6 +54,8 @@ Future<void> main() async {
   final productSyncService = ProductApiSyncService(productApiService);
   await productSyncService.fullResync();
 
+  await LayoutModel.deleteFromHive();
+
   // Synchronize layout at startup
   final layoutSyncService = LayoutApiSyncService(api: layoutApiService);
   await layoutSyncService.syncLayout();
