@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 
 import '../../models/product_model.dart';
 import '../../models/shopping_list_model.dart';
@@ -99,7 +98,7 @@ class _BrowseProductsPageState extends State<BrowseProductsPage> {
   }
 
   Future<void> _onProductTap(ProductModel product) async {
-    final repo = ShoppingListRepository();
+    final repo = ShoppingListsRepository();
     final lists = await repo.getAllShoppingLists();
 
     showModalBottomSheet(

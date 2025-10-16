@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../services/layout_api_service.dart';
 import '../../models/layout_model.dart';
 import '../common/interactive_map.dart';
+import '../../repositories/shopping_list_repository.dart';
 
 class InteractiveMapPage extends StatefulWidget {
   final LayoutApiService layoutService;
@@ -18,6 +19,14 @@ class _InteractiveMapPageState extends State<InteractiveMapPage>
   @override
   bool get wantKeepAlive =>
       true; // garde l'état de la page entre les navigations
+
+  late ShoppingListsRepository repo;
+
+  @override
+  void initState() {
+    super.initState();
+    repo = ShoppingListsRepository();
+  }
 
   @override
   Widget build(BuildContext context) {

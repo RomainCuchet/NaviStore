@@ -18,6 +18,8 @@ import 'models/shopping_list_model.dart';
 import 'models/layout_model.dart';
 import 'models/product_categories_model.dart';
 
+import 'repositories/shopping_list_repository.dart';
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load(fileName: ".env");
@@ -32,6 +34,8 @@ Future<void> main() async {
   await Hive.openBox<ShoppingListModel>('shopping_lists');
   await Hive.openBox<ProductModel>('products');
   await Hive.openBox<ProductCategoriesModel>('product_categories');
+  await Hive.openBox<LayoutModel>('layout');
+  await Hive.openBox<ProductCategoriesModel>('productCategoriesBox');
 
   // Create the API services
   final productApiService = ProductApiService(
@@ -42,6 +46,9 @@ Future<void> main() async {
     baseUrl: dotenv.env['API_URL'] ?? 'http://localhost:8000',
     apiKey: dotenv.env['API_KEY'] ?? '',
   );
+
+  // Delete products not in any list
+  ShoppingListsRepository.cleanOrphanedProducts();
 
   // Synchronize products at startup
   final productSyncService = ProductApiSyncService(productApiService);

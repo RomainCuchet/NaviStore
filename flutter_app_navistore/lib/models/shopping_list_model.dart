@@ -1,4 +1,5 @@
 import 'package:hive/hive.dart';
+import 'product_model.dart';
 
 part 'shopping_list_model.g.dart';
 
@@ -39,17 +40,17 @@ class ShoppingListModel extends HiveObject {
   }
 
   Future<void> saveToHive() async {
-    final box = await Hive.openBox<ShoppingListModel>('shopping_lists');
+    final box = Hive.box<ShoppingListModel>('shopping_lists');
     await box.put(id, this);
   }
 
   Future<void> deleteFromHive() async {
-    final box = await Hive.openBox<ShoppingListModel>('shopping_lists');
+    final box = Hive.box<ShoppingListModel>('shopping_lists');
     await box.delete(id);
   }
 
   static Future<List<ShoppingListModel>> getAllFromHive() async {
-    final box = await Hive.openBox<ShoppingListModel>('shopping_lists');
+    final box = Hive.box<ShoppingListModel>('shopping_lists');
     return box.values.toList();
   }
 
@@ -77,5 +78,29 @@ class ShoppingListModel extends HiveObject {
       name: name ?? this.name,
       productIds: productIds ?? this.productIds,
     );
+  }
+
+  Future<List<ProductModel>> getProducts() async {
+    final productsBox = Hive.box<ProductModel>('products');
+    List<ProductModel> products = [];
+
+    for (var productId in productIds) {
+      final product = productsBox.get(productId);
+      if (product != null) {
+        products.add(product);
+      }
+    }
+
+    return products;
+  }
+
+  Future<(double, double)> getPrices() async {
+    final products = await getProducts();
+
+    double totalProductsPrice = products.fold(0, (sum, p) => sum + p.price);
+    double availableProductsPrice =
+        products.where((p) => p.isAvailable).fold(0, (sum, p) => sum + p.price);
+
+    return (totalProductsPrice, availableProductsPrice);
   }
 }

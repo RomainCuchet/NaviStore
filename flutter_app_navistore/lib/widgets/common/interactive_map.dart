@@ -110,7 +110,6 @@ class _InteractiveMapState extends State<InteractiveMap>
     // Colors modestes et modernes
     final bg =
         widget.backgroundColor ?? Theme.of(context).colorScheme.background;
-    final iconColor = Theme.of(context).colorScheme.onPrimaryContainer;
     return Container(
       color: bg,
       child: Stack(

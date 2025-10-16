@@ -29,49 +29,27 @@ class _ShoppingListExtendedCardState extends State<ShoppingListExtendedCard> {
   void initState() {
     super.initState();
     _nameController = TextEditingController(text: widget.shoppingList.name);
-    _loadProductsFromHive();
+    _loadProducts();
+    widget.shoppingList.getPrices().then((value) {
+      setState(() {
+        totalAvailable = value.$1;
+        totalAll = value.$2;
+      });
+    });
   }
 
   /// Charge uniquement les produits depuis Hive
-  Future<void> _loadProductsFromHive() async {
-    setState(() => _isLoading = true);
-    try {
-      final allProducts = await ProductModel.getAllFromHive();
-      final productMap = {for (var p in allProducts) p.id: p};
-
-      final listProducts = widget.shoppingList.productIds.map((id) {
-        // Produit trouvé dans Hive
-        return productMap[id] ??
-            ProductModel(
-              id: id,
-              name: "Produit inconnu",
-              price: 0,
-              category: "Inconnu",
-              isAvailable: false,
-            );
-      }).toList();
-
-      setState(() => products = listProducts);
-
-      // Supprime les produits orphelins (non utilisés dans aucune liste)
-      final allLists = await ShoppingListModel.getAllFromHive();
-      final usedIds = allLists.expand((l) => l.productIds).toSet();
-      for (var p in allProducts) {
-        if (!usedIds.contains(p.id)) {
-          await p.deleteFromHive();
-        }
-      }
-    } catch (e) {
-      print("❌ Failed to load products from Hive: $e");
-      setState(() => products = []);
-    } finally {
-      setState(() => _isLoading = false);
-    }
+  Future<void> _loadProducts() async {
+    final loaded = await widget.shoppingList.getProducts();
+    if (!mounted) return;
+    setState(() {
+      products = loaded;
+      _isLoading = false;
+    });
   }
 
-  double get totalAvailable =>
-      products.where((p) => p.isAvailable).fold(0, (sum, p) => sum + p.price);
-  double get totalAll => products.fold(0, (sum, p) => sum + p.price);
+  double totalAvailable = 0;
+  double totalAll = 0;
 
   Future<void> _deleteProduct(ProductModel product) async {
     final confirmed = await showDialog<bool>(
@@ -94,7 +72,7 @@ class _ShoppingListExtendedCardState extends State<ShoppingListExtendedCard> {
       setState(() => products.remove(product));
 
       // Met à jour la liste Hive
-      final repo = ShoppingListRepository();
+      final repo = ShoppingListsRepository();
       await repo.updateShoppingList(
         widget.shoppingList.copyWith(
           productIds: products.map((p) => p.id).toList(),
@@ -116,7 +94,7 @@ class _ShoppingListExtendedCardState extends State<ShoppingListExtendedCard> {
 
     setState(() => widget.shoppingList.name = newName);
 
-    final repo = ShoppingListRepository();
+    final repo = ShoppingListsRepository();
     await repo.updateShoppingList(
       widget.shoppingList.copyWith(
         name: newName,

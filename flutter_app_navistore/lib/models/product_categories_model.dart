@@ -16,23 +16,20 @@ class ProductCategoriesModel extends HiveObject {
 
   /// Save the single object to Hive (overwrite if exists)
   static Future<void> saveToHive(ProductCategoriesModel model) async {
-    var box =
-        await Hive.openBox<ProductCategoriesModel>('productCategoriesBox');
+    var box = Hive.box<ProductCategoriesModel>('productCategoriesBox');
     await box.put('single', model);
   }
 
   /// Retrieve the single object from Hive, or an empty one if none exists
   static Future<ProductCategoriesModel> getFromHive() async {
-    var box =
-        await Hive.openBox<ProductCategoriesModel>('productCategoriesBox');
+    var box = Hive.box<ProductCategoriesModel>('productCategoriesBox');
     var model = box.get('single');
     return model ?? ProductCategoriesModel(productCategories: []);
   }
 
   /// Delete the single object from Hive
   static Future<void> deleteFromHive() async {
-    var box =
-        await Hive.openBox<ProductCategoriesModel>('productCategoriesBox');
+    var box = Hive.box<ProductCategoriesModel>('productCategoriesBox');
     await box.delete('single');
   }
 }

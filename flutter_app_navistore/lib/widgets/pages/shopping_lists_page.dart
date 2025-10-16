@@ -12,12 +12,12 @@ class ShoppingListsPage extends StatefulWidget {
 }
 
 class _ShoppingListsPageState extends State<ShoppingListsPage> {
-  late ShoppingListRepository repo;
+  late ShoppingListsRepository repo;
 
   @override
   void initState() {
     super.initState();
-    repo = ShoppingListRepository();
+    repo = ShoppingListsRepository();
   }
 
   Future<void> _deleteList(BuildContext context, ShoppingListModel list) async {

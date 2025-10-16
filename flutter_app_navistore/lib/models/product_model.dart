@@ -88,17 +88,17 @@ class ProductModel extends HiveObject {
   }
 
   Future<void> saveToHive() async {
-    final box = await Hive.openBox<ProductModel>('products');
+    final box = await Hive.box<ProductModel>('products');
     await box.put(id, this);
   }
 
   Future<void> deleteFromHive() async {
-    final box = await Hive.openBox<ProductModel>('products');
+    final box = await Hive.box<ProductModel>('products');
     await box.delete(id);
   }
 
   static Future<List<ProductModel>> getAllFromHive() async {
-    final box = await Hive.openBox<ProductModel>('products');
+    final box = await Hive.box<ProductModel>('products');
     return box.values.toList();
   }
 }

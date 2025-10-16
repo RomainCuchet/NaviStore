@@ -26,8 +26,8 @@ class ProductApiSyncService {
 
   /// Load and synchronize all locally stored products with the API
   Future<void> syncProducts() async {
-    final allProductsBox = await Hive.openBox<ProductModel>('products');
-    final allListsBox = await Hive.openBox<ShoppingListModel>('shopping_lists');
+    final allProductsBox = Hive.box<ProductModel>('products');
+    final allListsBox = Hive.box<ShoppingListModel>('shopping_lists');
 
     final storedProducts = allProductsBox.values.toList();
 

@@ -1,12 +1,13 @@
 import 'package:hive/hive.dart';
 import '../models/shopping_list_model.dart';
+import '../models/product_model.dart';
 
-class ShoppingListRepository {
+class ShoppingListsRepository {
   final String _boxName = 'shopping_lists';
 
   /// Ouvre la box Hive
   Future<Box<ShoppingListModel>> _getBox() async {
-    return await Hive.openBox<ShoppingListModel>(_boxName);
+    return Hive.box<ShoppingListModel>(_boxName);
   }
 
   /// Récupérer toutes les listes
@@ -61,5 +62,20 @@ class ShoppingListRepository {
   Future<void> clearAllLists() async {
     final box = await _getBox();
     await box.clear();
+  }
+
+  static Future<void> cleanOrphanedProducts() async {
+    final allLists = await ShoppingListModel.getAllFromHive();
+    final allProductIdsInLists =
+        allLists.expand((list) => list.productIds).toSet();
+
+    final productsBox = await Hive.box<ProductModel>('products');
+    final allStoredProducts = productsBox.values.toList();
+
+    for (var product in allStoredProducts) {
+      if (!allProductIdsInLists.contains(product.id)) {
+        await productsBox.delete(product.id);
+      }
+    }
   }
 }
