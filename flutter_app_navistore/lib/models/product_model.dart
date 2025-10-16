@@ -75,6 +75,7 @@ class ProductModel extends HiveObject {
     String? category,
     double? price,
     String? imagePath,
+    List<double>? position,
   }) {
     return ProductModel(
       id: id ?? this.id,
@@ -84,6 +85,7 @@ class ProductModel extends HiveObject {
       category: category ?? this.category,
       price: price ?? this.price,
       imagePath: imagePath ?? this.imagePath,
+      position: position ?? this.position,
     );
   }
 

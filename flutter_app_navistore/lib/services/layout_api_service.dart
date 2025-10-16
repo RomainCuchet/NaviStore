@@ -48,7 +48,7 @@ class LayoutApiService {
     bool includeReturnToStart = true,
   }) async {
     final uri = Uri.parse('$baseUrl/path_optimization/optimize_path');
-
+    print('POI Coordinates: $poiCoordinates');
     final body = jsonEncode({
       'poi_coordinates': poiCoordinates,
       'distance_threshold': distanceThreshold,

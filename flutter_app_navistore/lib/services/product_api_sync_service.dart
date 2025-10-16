@@ -42,10 +42,19 @@ class ProductApiSyncService {
 
       final fetchedMap = {for (var p in fetchedProducts) p.id: p};
 
-      // Update availability of all stored products according to fetched data
+      // Update availability and position of all stored products according to fetched data
       for (var stored in storedProducts) {
         if (fetchedMap.containsKey(stored.id)) {
-          final updated = fetchedMap[stored.id]!.copyWith(isAvailable: true);
+          final fetched = fetchedMap[stored.id]!;
+          final updated = stored.copyWith(
+            isAvailable: true,
+            name: fetched.name,
+            brand: fetched.brand,
+            category: fetched.category,
+            price: fetched.price,
+            imagePath: fetched.imagePath,
+            position: fetched.position,
+          );
           await updated.saveToHive();
         } else if (allIdsInLists.contains(stored.id)) {
           final updated = stored.copyWith(isAvailable: false);

@@ -85,18 +85,19 @@ class ShoppingListsRepository {
     return box.values.where((list) => list.showInOtherView).toList();
   }
 
-  /// fetch all products in the lists where showInOtherView is true
+  /// fetch all available products in the lists where showInOtherView is true
   static Future<List<ProductModel>> fetchMapProducts() async {
     final lists = await fetchMapLists();
     final productIds = lists.expand((list) => list.productIds).toSet();
 
     final productsBox = Hive.box<ProductModel>('products');
     return productsBox.values
-        .where((product) => productIds.contains(product.id))
+        .where((product) =>
+            productIds.contains(product.id) && product.isAvailable == true)
         .toList();
   }
 
-  /// Fetch the position of all products in the lists where showInOtherView is true
+  /// Fetch the position of all available products in the lists where showInOtherView is true
   static Future<List<List<double?>>> fetchProductPositions() async {
     final products = await fetchMapProducts();
     final positions = <List<double?>>[];
