@@ -50,7 +50,10 @@ class LayoutApiService {
     final uri = Uri.parse('$baseUrl/path_optimization/optimize_path');
     print('POI Coordinates: $poiCoordinates');
     final body = jsonEncode({
-      'poi_coordinates': poiCoordinates,
+      'poi_coordinates': poiCoordinates
+          .where((pt) => pt.length >= 2 && pt[0] != null && pt[1] != null)
+          .map((pt) => {'x': pt[0], 'y': pt[1]})
+          .toList(),
       'distance_threshold': distanceThreshold,
       'max_runtime': maxRuntime,
       'include_return_to_start': includeReturnToStart,
