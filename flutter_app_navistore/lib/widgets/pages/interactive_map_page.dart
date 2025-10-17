@@ -29,6 +29,10 @@ class _TrianglePainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
+// Widget d'indicateur moderne
+
+// Widget d'indicateur moderne
+
 class InteractiveMapPage extends StatefulWidget {
   final LayoutApiService layoutService;
 
@@ -41,6 +45,7 @@ class InteractiveMapPage extends StatefulWidget {
 
 class _InteractiveMapPageState extends State<InteractiveMapPage>
     with AutomaticKeepAliveClientMixin<InteractiveMapPage> {
+  bool _showInfoBar = true;
   @override
   bool get wantKeepAlive => true;
 
@@ -53,6 +58,7 @@ class _InteractiveMapPageState extends State<InteractiveMapPage>
   bool _loading = true;
   String? _error;
   String? _pathError;
+  double _totalDistance = 0.0;
 
   @override
   void initState() {
@@ -96,6 +102,10 @@ class _InteractiveMapPageState extends State<InteractiveMapPage>
             poiCoordinates: poiCoordinates,
             includeReturnToStart: true,
           );
+
+          // Stocker la distance totale
+          _totalDistance =
+              (result['total_distance'] as num?)?.toDouble() ?? 0.0;
 
           if ((result['success'] == true) && result['complete_path'] is List) {
             pathData = (result['complete_path'] as List)
@@ -177,17 +187,18 @@ class _InteractiveMapPageState extends State<InteractiveMapPage>
       body: SafeArea(
         child: Column(
           children: [
-            // En-tête
-            Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+            // Thin modern header bar
+            Container(
+              height: 38,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface.withOpacity(0.95),
+                border: const Border(
+                  bottom: BorderSide(width: 0.5, color: Color(0x11000000)),
+                ),
+              ),
               child: Row(
                 children: [
-                  Text(
-                    'Store Map',
-                    style: Theme.of(context).textTheme.headlineSmall,
-                  ),
-                  const Spacer(),
                   IconButton(
                     onPressed: () async {
                       try {
@@ -201,194 +212,257 @@ class _InteractiveMapPageState extends State<InteractiveMapPage>
                       }
                     },
                     tooltip: 'Rafraîchir',
-                    icon: const Icon(Icons.refresh),
+                    icon: const Icon(Icons.refresh, size: 22),
+                    splashRadius: 18,
+                  ),
+                  const Spacer(),
+                  // Modern toggle (radio) button for info section
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 200),
+                    child: Switch(
+                      value: _showInfoBar,
+                      onChanged: (val) {
+                        setState(() {
+                          _showInfoBar = val;
+                        });
+                      },
+                      activeColor: Theme.of(context).colorScheme.primary,
+                      inactiveThumbColor: Theme.of(context)
+                          .colorScheme
+                          .onSurface
+                          .withOpacity(0.3),
+                      inactiveTrackColor:
+                          Theme.of(context).colorScheme.surfaceVariant,
+                    ),
                   ),
                 ],
               ),
             ),
-
-            // Carte interactive
+            // Carte occupe tout l'espace, infos en overlay en bas
             Expanded(
-              child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
-                child: Card(
-                  elevation: 2,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(16),
-                    child: Stack(
-                      children: [
-                        if (_loading)
-                          const Center(
-                              child: CircularProgressIndicator.adaptive())
-                        else
-                          InteractiveMap(
-                            key: ValueKey('map-$_svgVersion'),
-                            loadSvg: () async {
-                              String svg = _baseSvg ?? '';
-                              // Ajouter le chemin au SVG si disponible
-                              if (_optimizedPath != null &&
-                                  _optimizedPath!.isNotEmpty) {
-                                svg = _createSvgWithPath(svg, _optimizedPath!);
-                              }
-                              return svg;
-                            },
-                            backgroundColor:
-                                Theme.of(context).colorScheme.surfaceVariant,
-                            // Builder pour les overlays (pins)
-                            overlayBuilder: (svgToScreen) {
-                              // Récupérer le niveau de zoom
-                              final zoom =
-                                  1.0; // TODO: récupérer le vrai zoom depuis InteractiveMap
-                              List<Widget> overlays = [];
-                              // Overlay du chemin
-                              if (_optimizedPath != null &&
-                                  _optimizedPath!.length > 1) {
-                                final pathPoints = _optimizedPath!
-                                    .map((pt) => svgToScreen(pt[0], pt[1]))
-                                    .toList();
-                                overlays.add(
-                                  Positioned.fill(
-                                    child: CustomPaint(
-                                      painter: PathOverlayPainter(
-                                          points: pathPoints, zoom: zoom),
-                                    ),
-                                  ),
-                                );
-                              }
-                              // Overlay des pins
-                              overlays.addAll(_pins.map((pin) {
-                                final screenPos = svgToScreen(pin.x, pin.y);
-                                if (pin is ArticlePin) {
-                                  return Positioned(
-                                    left: screenPos.dx - 9,
-                                    top: screenPos.dy - 9,
-                                    child: _buildPin(pin),
-                                  );
-                                } else {
-                                  return Positioned(
-                                    left: screenPos.dx - 20,
-                                    top: screenPos.dy - 50,
-                                    child: _buildPin(pin),
-                                  );
+              child: Stack(
+                children: [
+                  // Carte
+                  Positioned.fill(
+                    child: Container(
+                      color: Theme.of(context).colorScheme.surface,
+                      child: Stack(
+                        children: [
+                          if (_loading)
+                            const Center(
+                                child: CircularProgressIndicator.adaptive())
+                          else
+                            InteractiveMap(
+                              key: ValueKey('map-$_svgVersion'),
+                              loadSvg: () async {
+                                String svg = _baseSvg ?? '';
+                                if (_optimizedPath != null &&
+                                    _optimizedPath!.isNotEmpty) {
+                                  svg =
+                                      _createSvgWithPath(svg, _optimizedPath!);
                                 }
-                              }));
-                              return Stack(children: overlays);
-                            },
-                          ),
-
-                        // Erreur de chemin (non-bloquante)
-                        if (_pathError != null && !_loading)
-                          Positioned(
-                            left: 12,
-                            top: 12,
-                            right: 12,
-                            child: Material(
-                              color: Colors.transparent,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 12, vertical: 8),
-                                decoration: BoxDecoration(
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .errorContainer
-                                      .withOpacity(0.9),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.info_outline,
-                                        size: 16,
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .onErrorContainer),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Text(
-                                        _pathError!,
-                                        style: TextStyle(
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .onErrorContainer,
-                                        ),
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
+                                return svg;
+                              },
+                              backgroundColor:
+                                  Theme.of(context).colorScheme.surfaceVariant,
+                              overlayBuilder: (svgToScreen) {
+                                final zoom = 1.0;
+                                List<Widget> overlays = [];
+                                if (_optimizedPath != null &&
+                                    _optimizedPath!.length > 1) {
+                                  final pathPoints = _optimizedPath!
+                                      .map((pt) => svgToScreen(pt[0], pt[1]))
+                                      .toList();
+                                  overlays.add(
+                                    Positioned.fill(
+                                      child: CustomPaint(
+                                        painter: PathOverlayPainter(
+                                            points: pathPoints, zoom: zoom),
                                       ),
                                     ),
-                                  ],
-                                ),
-                              ),
+                                  );
+                                }
+                                overlays.addAll(_pins.map((pin) {
+                                  final screenPos = svgToScreen(pin.x, pin.y);
+                                  if (pin is ArticlePin) {
+                                    return Positioned(
+                                      left: screenPos.dx - 9,
+                                      top: screenPos.dy - 9,
+                                      child: _buildPin(pin),
+                                    );
+                                  } else {
+                                    return Positioned(
+                                      left: screenPos.dx - 20,
+                                      top: screenPos.dy - 50,
+                                      child: _buildPin(pin),
+                                    );
+                                  }
+                                }));
+                                return Stack(children: overlays);
+                              },
                             ),
-                          ),
-
-                        // Erreur bloquante
-                        if (_error != null && !_loading)
-                          Positioned.fill(
-                            child: Center(
-                              child: Padding(
-                                padding: const EdgeInsets.all(16.0),
-                                child:
-                                    Text(_error!, textAlign: TextAlign.center),
-                              ),
-                            ),
-                          ),
-
-                        // Bouton d'aide
-                        Positioned(
-                          right: 12,
-                          bottom: 12,
-                          child: FloatingActionButton(
-                            heroTag: 'map-help',
-                            elevation: 4,
-                            mini: true,
-                            backgroundColor:
-                                Theme.of(context).colorScheme.primary,
-                            onPressed: () {
-                              showModalBottomSheet(
-                                context: context,
-                                shape: const RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.vertical(
-                                    top: Radius.circular(16),
+                          // Erreur de chemin (non-bloquante)
+                          if (_pathError != null && !_loading)
+                            Positioned(
+                              left: 12,
+                              top: 12,
+                              right: 12,
+                              child: Material(
+                                color: Colors.transparent,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .errorContainer
+                                        .withOpacity(0.9),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.info_outline,
+                                          size: 16,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onErrorContainer),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          _pathError!,
+                                          style: TextStyle(
+                                              color: Theme.of(context)
+                                                  .colorScheme
+                                                  .onErrorContainer),
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                                builder: (ctx) {
-                                  return Padding(
-                                    padding: const EdgeInsets.all(16.0),
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          'Aide',
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .titleMedium,
-                                        ),
-                                        const SizedBox(height: 8),
-                                        const Text(
-                                          '• Pincez pour zoomer\n'
-                                          '• Glissez pour naviguer\n'
-                                          '• Double-tapez pour zoom/reset\n'
-                                          '• Les pins rouges indiquent les produits',
-                                        ),
-                                        const SizedBox(height: 12),
-                                      ],
-                                    ),
+                              ),
+                            ),
+                          // Erreur bloquante
+                          if (_error != null && !_loading)
+                            Positioned.fill(
+                              child: Center(
+                                child: Padding(
+                                  padding: const EdgeInsets.all(16.0),
+                                  child: Text(_error!,
+                                      textAlign: TextAlign.center),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  // Section infos overlay en bas
+                  if (_showInfoBar)
+                    Align(
+                      alignment: Alignment.bottomCenter,
+                      child: Padding(
+                        padding: const EdgeInsets.only(
+                            bottom: 18.0, left: 18.0, right: 18.0),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .surfaceVariant
+                                .withOpacity(0.95),
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.04),
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                              vertical: 8, horizontal: 12),
+                          child: FutureBuilder<(int, int)>(
+                            future:
+                                ShoppingListsRepository.fetchProductCounts(),
+                            builder: (context, snapshotCounts) {
+                              return FutureBuilder<(double, double)>(
+                                future:
+                                    ShoppingListsRepository.fetchMapPrices(),
+                                builder: (context, snapshotPrices) {
+                                  final counts = snapshotCounts.data;
+                                  final prices = snapshotPrices.data;
+                                  final availableCount = counts?.$2 ?? 0;
+                                  final totalCount = counts?.$1 ?? 0;
+                                  final availablePrice = prices?.$2 ?? 0.0;
+                                  final distance = _optimizedPath != null &&
+                                          _optimizedPath!.isNotEmpty &&
+                                          _error == null
+                                      ? _totalDistance
+                                      : 0.0;
+                                  const walkSpeed = 1.2;
+                                  final shoppingTime = distance > 0
+                                      ? (distance / walkSpeed)
+                                      : 0.0;
+
+                                  final width =
+                                      MediaQuery.of(context).size.width;
+                                  final isSmall = width < 400;
+                                  final labelStyle = Theme.of(context)
+                                      .textTheme
+                                      .labelMedium
+                                      ?.copyWith(fontSize: isSmall ? 12 : null);
+                                  final valueStyle = Theme.of(context)
+                                      .textTheme
+                                      .titleMedium
+                                      ?.copyWith(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: isSmall ? 14 : null);
+
+                                  return Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceEvenly,
+                                    children: [
+                                      _IndicatorItem(
+                                        icon: Icons.shopping_cart,
+                                        label: 'Produits',
+                                        value: '$availableCount / $totalCount',
+                                        color: Colors.blue,
+                                        labelStyle: labelStyle?.copyWith(
+                                            color: Colors.blue),
+                                        valueStyle: valueStyle,
+                                      ),
+                                      _IndicatorItem(
+                                        icon: Icons.euro,
+                                        label: 'Prix',
+                                        value:
+                                            '${availablePrice.toStringAsFixed(2)}€',
+                                        color: Colors.green,
+                                        labelStyle: labelStyle?.copyWith(
+                                            color: Colors.green),
+                                        valueStyle: valueStyle,
+                                      ),
+                                      _IndicatorItem(
+                                        icon: Icons.timer,
+                                        label: 'Temps',
+                                        value: shoppingTime > 0
+                                            ? '${shoppingTime ~/ 60}min ${(shoppingTime % 60).toStringAsFixed(0)}s'
+                                            : '--',
+                                        color: Colors.deepPurple,
+                                        labelStyle: labelStyle?.copyWith(
+                                            color: Colors.deepPurple),
+                                        valueStyle: valueStyle,
+                                      ),
+                                    ],
                                   );
                                 },
                               );
                             },
-                            child: const Icon(Icons.info_outline),
                           ),
                         ),
-                      ],
+                      ),
                     ),
-                  ),
-                ),
+                ],
               ),
             ),
           ],
@@ -397,6 +471,7 @@ class _InteractiveMapPageState extends State<InteractiveMapPage>
     );
   }
 
+  // Move _buildPin outside of build method
   Widget _buildPin(PinBase pin) {
     if (pin is MapPin) {
       return Column(
@@ -438,5 +513,49 @@ class _InteractiveMapPageState extends State<InteractiveMapPage>
       return buildArticlePin(pin, context);
     }
     return const SizedBox.shrink();
+  }
+}
+
+// Widget d'indicateur moderne
+class _IndicatorItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color color;
+  final TextStyle? labelStyle;
+  final TextStyle? valueStyle;
+  const _IndicatorItem({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+    this.labelStyle,
+    this.valueStyle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        CircleAvatar(
+          backgroundColor: color.withOpacity(0.15),
+          child: Icon(icon, color: color, size: 22),
+        ),
+        const SizedBox(height: 6),
+        Text(label,
+            style: labelStyle ??
+                Theme.of(context)
+                    .textTheme
+                    .labelMedium
+                    ?.copyWith(color: color)),
+        Text(value,
+            style: valueStyle ??
+                Theme.of(context)
+                    .textTheme
+                    .titleMedium
+                    ?.copyWith(fontWeight: FontWeight.bold)),
+      ],
+    );
   }
 }

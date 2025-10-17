@@ -155,28 +155,6 @@ class _InteractiveMapState extends State<InteractiveMap>
     _animationController?.forward(from: 0);
   }
 
-  void _zoomBy(double factor) {
-    final Matrix4 cur = _transformationController.value;
-    final double currentScale = cur.getMaxScaleOnAxis();
-    final double newScale = currentScale * factor;
-
-    if (newScale < _minScale || newScale > _maxScale) return;
-
-    // Zoom autour du centre du viewport
-    if (_viewportSize != null) {
-      final centerX = _viewportSize!.width / 2;
-      final centerY = _viewportSize!.height / 2;
-
-      final Matrix4 next = Matrix4.identity()
-        ..translate(centerX, centerY)
-        ..scale(factor)
-        ..translate(-centerX, -centerY)
-        ..multiply(cur);
-
-      _animateTo(next);
-    }
-  }
-
   // Fonction pour convertir les coordonnées SVG en coordonnées écran
   Offset _svgToScreen(double svgX, double svgY) {
     if (_svgSize == null || _viewportSize == null) {
@@ -287,60 +265,7 @@ class _InteractiveMapState extends State<InteractiveMap>
                 );
               },
             ),
-
-          // Controls minimalistes
-          if (!_loading && _error == null)
-            Positioned(
-              left: 12,
-              bottom: 12,
-              child: Column(
-                children: [
-                  _smallControlButton(
-                    onPressed: () => _zoomBy(1.2),
-                    icon: Icons.add,
-                    tooltip: 'Zoomer',
-                  ),
-                  const SizedBox(height: 8),
-                  _smallControlButton(
-                    onPressed: () => _zoomBy(1 / 1.2),
-                    icon: Icons.remove,
-                    tooltip: 'Dézoomer',
-                  ),
-                  const SizedBox(height: 8),
-                  _smallControlButton(
-                    onPressed: _animateReset,
-                    icon: Icons.center_focus_strong,
-                    tooltip: 'Réinitialiser',
-                  ),
-                ],
-              ),
-            ),
         ],
-      ),
-    );
-  }
-
-  Widget _smallControlButton({
-    required VoidCallback onPressed,
-    required IconData icon,
-    String? tooltip,
-  }) {
-    return Material(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      color: Theme.of(context).colorScheme.primaryContainer,
-      child: InkWell(
-        onTap: onPressed,
-        borderRadius: BorderRadius.circular(12),
-        child: SizedBox(
-          height: 44,
-          width: 44,
-          child: Center(
-            child: Icon(icon,
-                size: 20,
-                color: Theme.of(context).colorScheme.onPrimaryContainer),
-          ),
-        ),
       ),
     );
   }
