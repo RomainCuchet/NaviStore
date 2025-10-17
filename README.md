@@ -7,7 +7,7 @@ Shopping in a large retail store can quickly become a frustrating experience. Cu
 NaviStore removes that friction.
 The app provides real-time product locations, generates an optimized route to complete your shopping list efficiently, and alerts you to product availability.
 
-👉 For customers: a faster, smoother, and more enjoyable shopping experience.
+👉 For customers: a faster, smoother, and more enjoyable shopping experience.  
 👉 For retailers: a powerful tool to improve customer satisfaction, streamline store navigation, and boost engagement with larger retail spaces.
 
 # Api
