@@ -135,13 +135,16 @@ print(response.json()["total_distance"])
 
 ---
 
-### Summary
-
-The Path Optimization Pipeline offers a **modular, efficient, and production-ready** framework for route computation.
-Its flexible algorithm selection, caching, and robust fallback logic make it ideal for real-time navigation and optimization applications.
-
 
 4. **Scalability**: Built for distributed systems, it can handle growing product catalogs efficiently.
+
+## Security
+As this application is currently a proof of concept (POC), it is not intended for production deployment at this stage. We have implemented a basic API key system to control access and verify user rights. However, the API currently operates over HTTP, which means API keys are transmitted in plaintext and are not secure.
+
+We recognize the importance of securing API communications with HTTPS and SSL certificates, especially to protect sensitive data and credentials. For this POC, we chose not to implement SSL due to the overhead of certificate management, renewal processes, and the potential variability in SSL policies across different deployment environments or client organizations. When moving towards production or public deployment, enabling HTTPS and robust security measures will be a top priority.
+
+> **Warning for Future Development:**  
+> Implement HTTPS for deployment. Transmitting API keys and sensitive data over HTTP is insecure and exposes users to potential risks. For production deployments, always use SSL certificates and enforce secure connections.
 
 ## Implementation Notes
 - To delete index in developer mode: `Invoke-RestMethod -Method Delete -Uri "http://localhost:9200/products"`

@@ -17,14 +17,14 @@ class InteractiveMapPage extends StatefulWidget {
 class _InteractiveMapPageState extends State<InteractiveMapPage>
     with AutomaticKeepAliveClientMixin<InteractiveMapPage> {
   @override
-  bool get wantKeepAlive =>
-      true; // garde l'état de la page entre les navigations
+  bool get wantKeepAlive => true;
 
   late ShoppingListsRepository repo;
 
   String? _baseSvg;
-  String? _svgWithPath;
-  int _svgVersion = 0; // change key to force InteractiveMap to reload
+  List<List<double>>? _optimizedPath;
+  List<MapPin> _pins = [];
+  int _svgVersion = 0;
   bool _loading = true;
   String? _error;
   String? _pathError;
@@ -43,23 +43,23 @@ class _InteractiveMapPageState extends State<InteractiveMapPage>
       _pathError = null;
     });
 
-    // Always try to load the base SVG; if this fails, we show an error.
     try {
       final fromHive = await LayoutModel.getFromHive();
       final baseSvg = (fromHive != null && fromHive.layoutSvg.isNotEmpty)
           ? fromHive.layoutSvg
           : '';
 
-      // Prepare initial state to display at least the base map
-      String svgWithPath = baseSvg;
+      List<List<double>>? pathData;
+      List<MapPin> pins = [];
 
-      // Try to compute optimized path, but don't block the map if it fails
+      // Calculer le chemin optimisé
       try {
         const List<double> startPoint = [9980.0, 5020.0];
         final rawPositions =
             await ShoppingListsRepository.fetchProductPositions();
         final poiCoordinates = <List<double?>>[];
         poiCoordinates.add([startPoint[0], startPoint[1]]);
+
         for (final p in rawPositions) {
           if (p.length >= 2 && p[0] != null && p[1] != null) {
             poiCoordinates.add([p[0], p[1]]);
@@ -71,8 +71,9 @@ class _InteractiveMapPageState extends State<InteractiveMapPage>
             poiCoordinates: poiCoordinates,
             includeReturnToStart: false,
           );
+
           if ((result['success'] == true) && result['complete_path'] is List) {
-            final path = (result['complete_path'] as List)
+            pathData = (result['complete_path'] as List)
                 .whereType<List>()
                 .map<List<double>>((pt) {
               final x = (pt.isNotEmpty ? pt[0] : null);
@@ -82,38 +83,45 @@ class _InteractiveMapPageState extends State<InteractiveMapPage>
                 (y is num) ? y.toDouble() : 0.0,
               ];
             }).toList();
-            svgWithPath = _injectPathIntoSvg(baseSvg, path);
+          }
+
+          // Créer des pins pour chaque POI
+          for (int i = 0; i < poiCoordinates.length; i++) {
+            final coord = poiCoordinates[i];
+            if (coord[0] != null && coord[1] != null) {
+              pins.add(MapPin(
+                x: coord[0]!,
+                y: coord[1]!,
+                label: i == 0 ? 'Départ' : '$i',
+                color: i == 0 ? Colors.green : Colors.red,
+              ));
+            }
           }
         }
       } catch (e) {
-        // Keep map visible; just remember the path error
         _pathError = 'Chemin non disponible: $e';
       }
 
       setState(() {
         _baseSvg = baseSvg;
-        _svgWithPath = svgWithPath;
+        _optimizedPath = pathData;
+        _pins = pins;
         _svgVersion++;
         _loading = false;
       });
     } catch (e) {
-      // Base map failed to load; show an error message but avoid crashing
       setState(() {
         _error = 'Erreur de chargement du plan: $e';
         _baseSvg = '';
-        _svgWithPath = '';
         _loading = false;
       });
     }
   }
 
-  String _injectPathIntoSvg(String svg, List<List<double>> path) {
-    if (svg.isEmpty || path.isEmpty) return svg;
+  String _createSvgWithPath(String baseSvg, List<List<double>> path) {
+    if (baseSvg.isEmpty || path.isEmpty) return baseSvg;
 
-    // Build points attribute: "x1,y1 x2,y2 ..."
     final points = path.map((pt) => '${pt[0]},${pt[1]}').join(' ');
-
-    // Two-layer polyline for a modern look (base glow + top line)
     final overlay = '''
 <!-- Optimized Path Overlay -->
 <g id="optimized-path">
@@ -122,26 +130,24 @@ class _InteractiveMapPageState extends State<InteractiveMapPage>
 </g>
 ''';
 
-    // Insert before closing root tag. Try to place just before </svg>
     final closeTag = '</svg>';
-    final idx = svg.lastIndexOf(closeTag);
+    final idx = baseSvg.lastIndexOf(closeTag);
     if (idx != -1) {
-      return svg.substring(0, idx) + overlay + closeTag;
+      return baseSvg.substring(0, idx) + overlay + closeTag;
     }
-    // Fallback: append
-    return svg + overlay;
+    return baseSvg + overlay;
   }
 
   @override
   Widget build(BuildContext context) {
-    super.build(context); // obligatoire avec AutomaticKeepAliveClientMixin
+    super.build(context);
 
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
       body: SafeArea(
         child: Column(
           children: [
-            // --- En-tête minimaliste ---
+            // En-tête
             Padding(
               padding:
                   const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
@@ -157,9 +163,11 @@ class _InteractiveMapPageState extends State<InteractiveMapPage>
                       try {
                         await _initAndOptimize();
                       } catch (e) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Échec mise à jour: $e')),
-                        );
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Échec mise à jour: $e')),
+                          );
+                        }
                       }
                     },
                     tooltip: 'Rafraîchir',
@@ -169,7 +177,7 @@ class _InteractiveMapPageState extends State<InteractiveMapPage>
               ),
             ),
 
-            // --- Carte interactive ---
+            // Carte interactive
             Expanded(
               child: Padding(
                 padding:
@@ -190,14 +198,32 @@ class _InteractiveMapPageState extends State<InteractiveMapPage>
                           InteractiveMap(
                             key: ValueKey('map-$_svgVersion'),
                             loadSvg: () async {
-                              // Return base svg or svg with path if available
-                              return _svgWithPath ?? _baseSvg ?? '';
+                              String svg = _baseSvg ?? '';
+                              // Ajouter le chemin au SVG si disponible
+                              if (_optimizedPath != null &&
+                                  _optimizedPath!.isNotEmpty) {
+                                svg = _createSvgWithPath(svg, _optimizedPath!);
+                              }
+                              return svg;
                             },
                             backgroundColor:
                                 Theme.of(context).colorScheme.surfaceVariant,
+                            // Builder pour les overlays (pins)
+                            overlayBuilder: (svgToScreen) {
+                              return Stack(
+                                children: _pins.map((pin) {
+                                  final screenPos = svgToScreen(pin.x, pin.y);
+                                  return Positioned(
+                                    left: screenPos.dx - 20,
+                                    top: screenPos.dy - 40,
+                                    child: _buildPin(pin),
+                                  );
+                                }).toList(),
+                              );
+                            },
                           ),
 
-                        // Non-blocking error hint if optimization failed
+                        // Erreur de chemin (non-bloquante)
                         if (_pathError != null && !_loading)
                           Positioned(
                             left: 12,
@@ -241,7 +267,7 @@ class _InteractiveMapPageState extends State<InteractiveMapPage>
                             ),
                           ),
 
-                        // Blocking error only if base map failed to load
+                        // Erreur bloquante
                         if (_error != null && !_loading)
                           Positioned.fill(
                             child: Center(
@@ -253,7 +279,7 @@ class _InteractiveMapPageState extends State<InteractiveMapPage>
                             ),
                           ),
 
-                        // --- Bouton d'aide ---
+                        // Bouton d'aide
                         Positioned(
                           right: 12,
                           bottom: 12,
@@ -289,7 +315,8 @@ class _InteractiveMapPageState extends State<InteractiveMapPage>
                                         const Text(
                                           '• Pincez pour zoomer\n'
                                           '• Glissez pour naviguer\n'
-                                          '• Double-tapez pour zoom/reset',
+                                          '• Double-tapez pour zoom/reset\n'
+                                          '• Les pins rouges indiquent les produits',
                                         ),
                                         const SizedBox(height: 12),
                                       ],
@@ -312,4 +339,83 @@ class _InteractiveMapPageState extends State<InteractiveMapPage>
       ),
     );
   }
+
+  Widget _buildPin(MapPin pin) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: pin.color,
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white, width: 3),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.3),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Center(
+            child: Text(
+              pin.label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+              ),
+            ),
+          ),
+        ),
+        // Triangle pointer
+        CustomPaint(
+          size: const Size(10, 10),
+          painter: _TrianglePainter(color: pin.color),
+        ),
+      ],
+    );
+  }
+}
+
+// Classe pour représenter un pin sur la carte
+class MapPin {
+  final double x;
+  final double y;
+  final String label;
+  final Color color;
+
+  MapPin({
+    required this.x,
+    required this.y,
+    required this.label,
+    this.color = Colors.red,
+  });
+}
+
+// Painter pour le triangle du pin
+class _TrianglePainter extends CustomPainter {
+  final Color color;
+
+  _TrianglePainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+
+    final path = Path()
+      ..moveTo(size.width / 2, size.height)
+      ..lineTo(0, 0)
+      ..lineTo(size.width, 0)
+      ..close();
+
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

@@ -1,17 +1,21 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:xml/xml.dart';
+import 'package:vector_math/vector_math_64.dart';
 
 typedef SvgLoader = Future<String> Function();
 
 class InteractiveMap extends StatefulWidget {
   final SvgLoader loadSvg;
   final Color? backgroundColor;
+  final Widget Function(Offset Function(double x, double y))? overlayBuilder;
 
   const InteractiveMap({
     Key? key,
     required this.loadSvg,
     this.backgroundColor,
+    this.overlayBuilder,
   }) : super(key: key);
 
   @override
@@ -28,6 +32,10 @@ class _InteractiveMapState extends State<InteractiveMap>
   String? _error;
   double _minScale = 0.5;
   double _maxScale = 5.0;
+
+  // Dimensions du SVG
+  Size? _svgSize;
+  Size? _viewportSize;
 
   @override
   void initState() {
@@ -46,8 +54,13 @@ class _InteractiveMapState extends State<InteractiveMap>
     try {
       final svg = await widget.loadSvg();
       if (!mounted) return;
+
+      // Extraire les dimensions du SVG
+      final size = _extractSvgDimensions(svg);
+
       setState(() {
         _svgString = svg;
+        _svgSize = size;
         _loading = false;
       });
     } catch (e) {
@@ -57,6 +70,43 @@ class _InteractiveMapState extends State<InteractiveMap>
         _loading = false;
       });
     }
+  }
+
+  Size _extractSvgDimensions(String svgString) {
+    try {
+      final document = XmlDocument.parse(svgString);
+      final svgElement = document.findAllElements('svg').first;
+
+      // Essayer d'obtenir width et height
+      final width = svgElement.getAttribute('width');
+      final height = svgElement.getAttribute('height');
+
+      if (width != null && height != null) {
+        final w = double.tryParse(width.replaceAll(RegExp(r'[^0-9.]'), ''));
+        final h = double.tryParse(height.replaceAll(RegExp(r'[^0-9.]'), ''));
+        if (w != null && h != null) {
+          return Size(w, h);
+        }
+      }
+
+      // Sinon, essayer le viewBox
+      final viewBox = svgElement.getAttribute('viewBox');
+      if (viewBox != null) {
+        final values = viewBox.split(RegExp(r'[\s,]+'));
+        if (values.length == 4) {
+          final w = double.tryParse(values[2]);
+          final h = double.tryParse(values[3]);
+          if (w != null && h != null) {
+            return Size(w, h);
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Erreur extraction dimensions SVG: $e');
+    }
+
+    // Valeur par défaut si extraction échoue
+    return const Size(1000, 1000);
   }
 
   @override
@@ -69,13 +119,25 @@ class _InteractiveMapState extends State<InteractiveMap>
   void _onDoubleTap() {
     final current = _transformationController.value;
     final double currentScale = current.getMaxScaleOnAxis();
-    // Si zoomé, reset. Sinon zoom sur centre à 2x
     if (currentScale > 1.1) {
       _animateReset();
     } else {
-      final Matrix4 zoomed = Matrix4.identity()..scale(2.0);
+      final Matrix4 zoomed = _calculateZoomMatrix(2.0);
       _animateTo(zoomed);
     }
+  }
+
+  Matrix4 _calculateZoomMatrix(double scale) {
+    if (_viewportSize == null || _svgSize == null) return Matrix4.identity();
+
+    // Calculer le centre du viewport
+    final centerX = _viewportSize!.width / 2;
+    final centerY = _viewportSize!.height / 2;
+
+    return Matrix4.identity()
+      ..translate(centerX, centerY)
+      ..scale(scale)
+      ..translate(-centerX, -centerY);
   }
 
   void _animateReset() {
@@ -95,21 +157,59 @@ class _InteractiveMapState extends State<InteractiveMap>
 
   void _zoomBy(double factor) {
     final Matrix4 cur = _transformationController.value;
-    final double scale = cur.getMaxScaleOnAxis() * factor;
-    if (scale < _minScale) return;
-    if (scale > _maxScale) return;
-    // scale around center
-    final Matrix4 next = Matrix4.identity()
-      ..translate(cur.getTranslation().x, cur.getTranslation().y)
-      ..multiply(Matrix4.diagonal3Values(scale, scale, 1.0));
-    _animateTo(next);
+    final double currentScale = cur.getMaxScaleOnAxis();
+    final double newScale = currentScale * factor;
+
+    if (newScale < _minScale || newScale > _maxScale) return;
+
+    // Zoom autour du centre du viewport
+    if (_viewportSize != null) {
+      final centerX = _viewportSize!.width / 2;
+      final centerY = _viewportSize!.height / 2;
+
+      final Matrix4 next = Matrix4.identity()
+        ..translate(centerX, centerY)
+        ..scale(factor)
+        ..translate(-centerX, -centerY)
+        ..multiply(cur);
+
+      _animateTo(next);
+    }
+  }
+
+  // Fonction pour convertir les coordonnées SVG en coordonnées écran
+  Offset _svgToScreen(double svgX, double svgY) {
+    if (_svgSize == null || _viewportSize == null) {
+      return Offset.zero;
+    }
+
+    // Calculer le ratio de scaling pour fit BoxFit.contain
+    final scaleX = _viewportSize!.width / _svgSize!.width;
+    final scaleY = _viewportSize!.height / _svgSize!.height;
+    final scale = scaleX < scaleY ? scaleX : scaleY;
+
+    // Position du SVG centré dans le viewport
+    final svgDisplayWidth = _svgSize!.width * scale;
+    final svgDisplayHeight = _svgSize!.height * scale;
+    final offsetX = (_viewportSize!.width - svgDisplayWidth) / 2;
+    final offsetY = (_viewportSize!.height - svgDisplayHeight) / 2;
+
+    // Coordonnées dans le viewport
+    final viewportX = offsetX + (svgX * scale);
+    final viewportY = offsetY + (svgY * scale);
+
+    // Appliquer la transformation (zoom/pan)
+    final matrix = _transformationController.value;
+    final transformed = matrix.transform3(Vector3(viewportX, viewportY, 0));
+
+    return Offset(transformed.x, transformed.y);
   }
 
   @override
   Widget build(BuildContext context) {
-    // Colors modestes et modernes
     final bg =
         widget.backgroundColor ?? Theme.of(context).colorScheme.background;
+
     return Container(
       color: bg,
       child: Stack(
@@ -139,80 +239,92 @@ class _InteractiveMapState extends State<InteractiveMap>
                   style: Theme.of(context).textTheme.bodyLarge),
             )
           else
-            // InteractiveViewer gère pan / pinch
-            GestureDetector(
-              onDoubleTap: _onDoubleTap,
-              child: InteractiveViewer(
-                transformationController: _transformationController,
-                panEnabled: true,
-                scaleEnabled: true,
-                minScale: _minScale,
-                maxScale: _maxScale,
-                boundaryMargin: const EdgeInsets.all(double.infinity),
-                child: LayoutBuilder(builder: (context, constraints) {
-                  // Pour que le SVG prenne l'espace disponible tout en gardant ratio
-                  return ConstrainedBox(
-                    constraints: BoxConstraints.tightFor(
-                      width: constraints.maxWidth,
-                      height: constraints.maxHeight,
-                    ),
-                    child: Center(
-                      child: SingleChildScrollView(
-                        physics: const NeverScrollableScrollPhysics(),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                _viewportSize =
+                    Size(constraints.maxWidth, constraints.maxHeight);
+
+                return Stack(
+                  children: [
+                    // Le SVG dans l'InteractiveViewer
+                    GestureDetector(
+                      onDoubleTap: _onDoubleTap,
+                      child: InteractiveViewer(
+                        transformationController: _transformationController,
+                        panEnabled: true,
+                        scaleEnabled: true,
+                        minScale: _minScale,
+                        maxScale: _maxScale,
+                        boundaryMargin: EdgeInsets.zero,
+                        constrained: false,
                         child: SizedBox(
                           width: constraints.maxWidth,
                           height: constraints.maxHeight,
-                          child: SvgPicture.string(
-                            _svgString!,
-                            fit: BoxFit.contain,
-                            allowDrawingOutsideViewBox: true,
-                            // échelle automatique via BoxFit.contain
-                            placeholderBuilder: (context) => const Center(
-                                child: CircularProgressIndicator.adaptive()),
+                          child: Center(
+                            child: SvgPicture.string(
+                              _svgString!,
+                              fit: BoxFit.contain,
+                              allowDrawingOutsideViewBox: false,
+                              placeholderBuilder: (context) => const Center(
+                                  child: CircularProgressIndicator.adaptive()),
+                            ),
                           ),
                         ),
                       ),
                     ),
-                  );
-                }),
-              ),
+
+                    // Overlays synchronisés (pins, etc.)
+                    if (widget.overlayBuilder != null)
+                      IgnorePointer(
+                        child: ListenableBuilder(
+                          listenable: _transformationController,
+                          builder: (context, child) {
+                            return widget.overlayBuilder!(_svgToScreen);
+                          },
+                        ),
+                      ),
+                  ],
+                );
+              },
             ),
 
-          // Controls minimalistes (zoom + / - et reset) en bas à gauche
-          Positioned(
-            left: 12,
-            bottom: 12,
-            child: Column(
-              children: [
-                _smallControlButton(
-                  onPressed: () => _zoomBy(1.2),
-                  icon: Icons.add,
-                  tooltip: 'Zoomer',
-                ),
-                const SizedBox(height: 8),
-                _smallControlButton(
-                  onPressed: () => _zoomBy(1 / 1.2),
-                  icon: Icons.remove,
-                  tooltip: 'Dézoomer',
-                ),
-                const SizedBox(height: 8),
-                _smallControlButton(
-                  onPressed: _animateReset,
-                  icon: Icons.center_focus_strong,
-                  tooltip: 'Réinitialiser',
-                ),
-              ],
+          // Controls minimalistes
+          if (!_loading && _error == null)
+            Positioned(
+              left: 12,
+              bottom: 12,
+              child: Column(
+                children: [
+                  _smallControlButton(
+                    onPressed: () => _zoomBy(1.2),
+                    icon: Icons.add,
+                    tooltip: 'Zoomer',
+                  ),
+                  const SizedBox(height: 8),
+                  _smallControlButton(
+                    onPressed: () => _zoomBy(1 / 1.2),
+                    icon: Icons.remove,
+                    tooltip: 'Dézoomer',
+                  ),
+                  const SizedBox(height: 8),
+                  _smallControlButton(
+                    onPressed: _animateReset,
+                    icon: Icons.center_focus_strong,
+                    tooltip: 'Réinitialiser',
+                  ),
+                ],
+              ),
             ),
-          ),
         ],
       ),
     );
   }
 
-  Widget _smallControlButton(
-      {required VoidCallback onPressed,
-      required IconData icon,
-      String? tooltip}) {
+  Widget _smallControlButton({
+    required VoidCallback onPressed,
+    required IconData icon,
+    String? tooltip,
+  }) {
     return Material(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
