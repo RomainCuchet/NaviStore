@@ -19,30 +19,64 @@ class BubblePinProductInfo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Bubble size and pointer
-    const double bubbleWidth = 220;
-    const double bubbleHeight = 80;
+    const double bubbleMaxWidth = 170;
     const double pointerHeight = 16;
     const double pointerWidth = 28;
     const double margin = 8;
 
-    // Determine if bubble should be above or below the pin
-    bool showAbove = pinScreenPos.dy > (bubbleHeight + pointerHeight + margin);
-    // Horizontal shift to keep bubble in screen
-    double left = pinScreenPos.dx - bubbleWidth / 2;
-    if (left < margin) left = margin;
-    if (left + bubbleWidth > screenSize.width - margin)
-      left = screenSize.width - bubbleWidth - margin;
-    double top = showAbove
-        ? pinScreenPos.dy - bubbleHeight - pointerHeight
-        : pinScreenPos.dy + pointerHeight;
-    if (top < margin) top = margin;
-    if (top + bubbleHeight > screenSize.height - margin)
-      top = screenSize.height - bubbleHeight - margin;
+    // Fixed font size, dynamic lines
+    double nameFontSize = 10;
+    int nameMaxLines = 2;
+    if (productPin.name.length > 18) nameMaxLines = 3;
+    if (productPin.name.length > 28) nameMaxLines = 4;
 
-    // Responsive text size
-    double nameFontSize = 16;
-    if (productPin.name.length > 18) nameFontSize = 13;
-    if (productPin.name.length > 28) nameFontSize = 11;
+    // Calculate text height and include price
+    double lineHeight = nameFontSize * 1.2;
+    double textHeight = lineHeight * nameMaxLines;
+    double priceHeight = 18; // Height for price text
+    double verticalPadding = 12; // Top+bottom padding
+    double bubbleHeight = textHeight + priceHeight + verticalPadding;
+    double minHeight = 56;
+    if (bubbleHeight < minHeight) bubbleHeight = minHeight;
+
+    // Orientation logic: up/down/left/right
+    bool showAbove = true;
+    bool showLeft = false;
+    bool showRight = false;
+    double left = pinScreenPos.dx - bubbleMaxWidth / 2;
+    double top = pinScreenPos.dy - bubbleHeight - pointerHeight;
+
+    // Check for horizontal overflow (left/right)
+    if (pinScreenPos.dx + pointerHeight + bubbleMaxWidth >
+        screenSize.width - margin) {
+      // Collision à droite, bulle à gauche
+      showLeft = true;
+      showRight = false;
+      left = pinScreenPos.dx - bubbleMaxWidth - pointerHeight;
+      top = pinScreenPos.dy - bubbleHeight / 2;
+      if (top < margin) top = margin;
+      if (top + bubbleHeight > screenSize.height - margin)
+        top = screenSize.height - bubbleHeight - margin;
+    } else if (pinScreenPos.dx - pointerHeight - bubbleMaxWidth < margin) {
+      // Collision à gauche, bulle à droite
+      showLeft = false;
+      showRight = true;
+      left = pinScreenPos.dx + pointerHeight;
+      top = pinScreenPos.dy - bubbleHeight / 2;
+      if (top < margin) top = margin;
+      if (top + bubbleHeight > screenSize.height - margin)
+        top = screenSize.height - bubbleHeight - margin;
+    } else {
+      // If no horizontal collision, check vertical (up/down)
+      showAbove = pinScreenPos.dy > (bubbleHeight + pointerHeight + margin);
+      top = showAbove
+          ? pinScreenPos.dy - bubbleHeight - pointerHeight
+          : pinScreenPos.dy + pointerHeight;
+      // Clamp left to keep bubble fully visible horizontally
+      if (left < margin) left = margin;
+      if (left + bubbleMaxWidth > screenSize.width - margin)
+        left = screenSize.width - bubbleMaxWidth - margin;
+    }
 
     return Stack(
       children: [
@@ -55,96 +89,122 @@ class BubblePinProductInfo extends StatelessWidget {
               clipBehavior: Clip.none,
               children: [
                 Container(
-                  width: bubbleWidth,
-                  height: bubbleHeight,
+                  constraints: BoxConstraints(
+                    maxWidth: bubbleMaxWidth,
+                    minWidth: bubbleMaxWidth,
+                    minHeight: bubbleHeight,
+                    maxHeight: bubbleHeight,
+                  ),
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  height: bubbleHeight,
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    borderRadius: BorderRadius.circular(18),
+                    borderRadius: BorderRadius.circular(14),
                     boxShadow: [
                       BoxShadow(
                         color: Colors.black26,
-                        blurRadius: 12,
-                        offset: Offset(0, 6),
+                        blurRadius: 8,
+                        offset: Offset(0, 4),
                       ),
                     ],
                   ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
+                  child: Stack(
                     children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: Image.network(
-                          productPin.imagePath,
-                          width: 44,
-                          height: 44,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) =>
-                              const Icon(Icons.broken_image, size: 36),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            FittedBox(
-                              fit: BoxFit.scaleDown,
-                              child: Text(
-                                productPin.name,
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: nameFontSize,
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(6),
+                            child: Image.network(
+                              productPin.imagePath,
+                              width: 32,
+                              height: 32,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) =>
+                                  const Icon(Icons.broken_image, size: 24),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  productPin.name,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: nameFontSize,
+                                  ),
+                                  maxLines: nameMaxLines,
+                                  overflow: TextOverflow.ellipsis,
+                                  softWrap: true,
                                 ),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  '${productPin.price.toStringAsFixed(2)} €',
+                                  style: const TextStyle(
+                                    color: Colors.green,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ],
                             ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '${productPin.price.toStringAsFixed(2)} €',
-                              style: const TextStyle(
-                                color: Colors.green,
-                                fontWeight: FontWeight.w600,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
-                      // Close button
-                      Padding(
-                        padding: const EdgeInsets.only(left: 6.0),
+                      // Close button (very small, top right, no background)
+                      Positioned(
+                        top: 2,
+                        right: 2,
                         child: GestureDetector(
                           onTap: onClose,
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: Colors.grey.shade200,
-                              shape: BoxShape.circle,
-                            ),
-                            padding: const EdgeInsets.all(4),
-                            child: const Icon(Icons.close,
-                                size: 18, color: Colors.black54),
-                          ),
+                          child: const Icon(Icons.close,
+                              size: 13, color: Color(0x99000000)),
                         ),
                       ),
                     ],
                   ),
                 ),
                 // Pointer
-                Positioned(
-                  left: (bubbleWidth - pointerWidth) / 2,
-                  top: showAbove ? bubbleHeight : -pointerHeight,
-                  child: Transform.rotate(
-                    angle: showAbove ? 3.1416 : 0,
-                    child: CustomPaint(
-                      size: const Size(pointerWidth, pointerHeight),
-                      painter: _BubblePointerPainter(color: productPin.color),
+                if (showLeft)
+                  Positioned(
+                    left: bubbleMaxWidth,
+                    top: (bubbleHeight - pointerWidth) / 2,
+                    child: Transform.rotate(
+                      angle: 1.5708, // pointe vers la droite
+                      child: CustomPaint(
+                        size: const Size(pointerWidth, pointerHeight),
+                        painter: _BubblePointerPainter(color: productPin.color),
+                      ),
+                    ),
+                  )
+                else if (showRight)
+                  Positioned(
+                    left: -pointerHeight,
+                    top: (bubbleHeight - pointerWidth) / 2,
+                    child: Transform.rotate(
+                      angle: -1.5708, // pointe vers la gauche
+                      child: CustomPaint(
+                        size: const Size(pointerWidth, pointerHeight),
+                        painter: _BubblePointerPainter(color: productPin.color),
+                      ),
+                    ),
+                  )
+                else
+                  Positioned(
+                    left: (bubbleMaxWidth - pointerWidth) / 2,
+                    top: showAbove ? bubbleHeight : -pointerHeight,
+                    child: Transform.rotate(
+                      angle: showAbove ? 3.1416 : 0,
+                      child: CustomPaint(
+                        size: const Size(pointerWidth, pointerHeight),
+                        painter: _BubblePointerPainter(color: productPin.color),
+                      ),
                     ),
                   ),
-                ),
               ],
             ),
           ),

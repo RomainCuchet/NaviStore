@@ -155,12 +155,12 @@ class _BrowseProductsPageState extends State<BrowseProductsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Produits"),
+        title: const Text("Products Browser"),
         centerTitle: true,
       ),
       body: Column(
         children: [
-          // Barre de recherche
+          // Search bar
           Padding(
             padding: const EdgeInsets.all(8.0),
             child: TextField(
@@ -190,14 +190,14 @@ class _BrowseProductsPageState extends State<BrowseProductsPage> {
             ),
           ),
 
-          // Filtre catégorie
+          // Filter by category
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  "Filtrer par catégorie",
+                  "Filter by category:",
                   style: TextStyle(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 4),
@@ -243,7 +243,7 @@ class _BrowseProductsPageState extends State<BrowseProductsPage> {
             ),
           ),
 
-          // Chip filtre actif
+          // Chip filter active
           if (selectedCategory != null)
             Padding(
               padding: const EdgeInsets.all(8.0),
@@ -263,7 +263,7 @@ class _BrowseProductsPageState extends State<BrowseProductsPage> {
 
           const SizedBox(height: 8),
 
-          // Liste produits
+          // Products list
           Expanded(
             child: isLoading
                 ? const Center(child: CircularProgressIndicator())

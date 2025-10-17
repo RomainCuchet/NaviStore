@@ -33,8 +33,8 @@ class _ShoppingListExtendedCardState extends State<ShoppingListExtendedCard> {
     _showInOtherView = widget.shoppingList.showInOtherView;
     widget.shoppingList.getPrices().then((value) {
       setState(() {
-        totalAvailable = value.$1;
-        totalAll = value.$2;
+        totalAvailable = value.$2;
+        totalAll = value.$1;
       });
     });
   }
@@ -56,15 +56,15 @@ class _ShoppingListExtendedCardState extends State<ShoppingListExtendedCard> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text("Supprimer le produit ?"),
-        content: Text("Voulez-vous vraiment supprimer '${product.name}' ?"),
+        title: const Text("Ddelete the product?"),
+        content: Text("Do you really want to delete '${product.name}'?"),
         actions: [
           TextButton(
               onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text("Annuler")),
+              child: const Text("Cancel")),
           TextButton(
               onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text("Supprimer")),
+              child: const Text("Delete")),
         ],
       ),
     );
@@ -216,16 +216,16 @@ class _ShoppingListExtendedCardState extends State<ShoppingListExtendedCard> {
                       final confirmed = await showDialog<bool>(
                         context: context,
                         builder: (ctx) => AlertDialog(
-                          title: const Text("Supprimer la liste ?"),
+                          title: const Text("Delete the list?"),
                           content: Text(
-                              "Voulez-vous vraiment supprimer la liste '${widget.shoppingList.name}' ?"),
+                              "Do you really want to delete the list '${widget.shoppingList.name}'?"),
                           actions: [
                             TextButton(
                                 onPressed: () => Navigator.of(ctx).pop(false),
-                                child: const Text("Annuler")),
+                                child: const Text("Cancel")),
                             TextButton(
                                 onPressed: () => Navigator.of(ctx).pop(true),
-                                child: const Text("Supprimer")),
+                                child: const Text("Delete")),
                           ],
                         ),
                       );

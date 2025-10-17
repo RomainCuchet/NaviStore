@@ -128,13 +128,13 @@ class _MyHomePageState extends State<MyHomePage> {
     Widget page;
     switch (selectedIndex) {
       case 0:
-        page = InteractiveMapPage(layoutService: layoutService);
-        break;
-      case 1:
         page = const ShoppingListsPage();
         break;
-      case 2:
+      case 1:
         page = BrowseProductsPage(productService: productService);
+        break;
+      case 2:
+        page = InteractiveMapPage(layoutService: layoutService);
         break;
       default:
         throw UnimplementedError('No page for $selectedIndex');
@@ -150,11 +150,11 @@ class _MyHomePageState extends State<MyHomePage> {
                   extended: constraints.maxWidth >= 600,
                   destinations: const [
                     NavigationRailDestination(
-                        icon: Icon(Icons.map), label: Text('Map')),
-                    NavigationRailDestination(
                         icon: Icon(Icons.list), label: Text('Shopping Lists')),
                     NavigationRailDestination(
                         icon: Icon(Icons.search), label: Text('Products')),
+                    NavigationRailDestination(
+                        icon: Icon(Icons.map), label: Text('Map')),
                   ],
                   selectedIndex: selectedIndex,
                   onDestinationSelected: (value) =>

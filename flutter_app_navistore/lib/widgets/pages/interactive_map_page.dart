@@ -47,7 +47,6 @@ class InteractiveMapPage extends StatefulWidget {
 class _InteractiveMapPageState extends State<InteractiveMapPage>
     with AutomaticKeepAliveClientMixin<InteractiveMapPage> {
   ProductPin? _selectedProductPin;
-  Offset? _selectedPinScreenPos;
   bool _showInfoBar = true;
 
   @override
@@ -304,10 +303,8 @@ class _InteractiveMapPageState extends State<InteractiveMapPage>
                                         setState(() {
                                           if (pin is ProductPin) {
                                             _selectedProductPin = pin;
-                                            _selectedPinScreenPos = screenPos;
                                           } else {
                                             _selectedProductPin = null;
-                                            _selectedPinScreenPos = null;
                                           }
                                         });
                                       },
@@ -316,17 +313,18 @@ class _InteractiveMapPageState extends State<InteractiveMapPage>
                                   );
                                 }));
                                 // Overlay for selected ProductPin
-                                if (_selectedProductPin != null &&
-                                    _selectedPinScreenPos != null) {
+                                if (_selectedProductPin != null && true) {
+                                  final pinScreenPos = svgToScreen(
+                                      _selectedProductPin!.x,
+                                      _selectedProductPin!.y);
                                   overlays.add(
                                     BubblePinProductInfo(
                                       productPin: _selectedProductPin!,
-                                      pinScreenPos: _selectedPinScreenPos!,
+                                      pinScreenPos: pinScreenPos,
                                       screenSize: MediaQuery.of(context).size,
                                       onClose: () {
                                         setState(() {
                                           _selectedProductPin = null;
-                                          _selectedPinScreenPos = null;
                                         });
                                       },
                                     ),
@@ -340,7 +338,6 @@ class _InteractiveMapPageState extends State<InteractiveMapPage>
                                       if (_selectedProductPin != null) {
                                         setState(() {
                                           _selectedProductPin = null;
-                                          _selectedPinScreenPos = null;
                                         });
                                       }
                                     },
