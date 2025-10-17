@@ -4,6 +4,75 @@ import '../../models/layout_model.dart';
 import '../common/interactive_map.dart';
 import '../../repositories/shopping_list_repository.dart';
 
+// Classe de base abstraite pour tous les pins
+abstract class PinBase {
+  final double x;
+  final double y;
+  final Color color;
+  const PinBase({required this.x, required this.y, required this.color});
+}
+
+class MapPin extends PinBase {
+  final String label;
+  MapPin({
+    required double x,
+    required double y,
+    required this.label,
+    Color color = Colors.red,
+  }) : super(x: x, y: y, color: color);
+}
+
+class ArticlePin extends PinBase {
+  ArticlePin({
+    required double x,
+    required double y,
+    Color color = Colors.blue,
+  }) : super(x: x, y: y, color: color);
+}
+
+class _TrianglePainter extends CustomPainter {
+  final Color color;
+
+  _TrianglePainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+
+    final path = Path()
+      ..moveTo(size.width / 2, size.height)
+      ..lineTo(0, 0)
+      ..lineTo(size.width, 0)
+      ..close();
+
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+Widget buildArticlePin(ArticlePin pin, BuildContext context) {
+  return Container(
+    width: 18,
+    height: 18,
+    decoration: BoxDecoration(
+      color: Theme.of(context).colorScheme.primary,
+      shape: BoxShape.circle,
+      border: Border.all(color: Colors.white, width: 3),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withOpacity(0.2),
+          blurRadius: 4,
+          offset: const Offset(0, 1),
+        ),
+      ],
+    ),
+  );
+}
+
 class InteractiveMapPage extends StatefulWidget {
   final LayoutApiService layoutService;
 
@@ -23,7 +92,7 @@ class _InteractiveMapPageState extends State<InteractiveMapPage>
 
   String? _baseSvg;
   List<List<double>>? _optimizedPath;
-  List<MapPin> _pins = [];
+  List<PinBase> _pins = [];
   int _svgVersion = 0;
   bool _loading = true;
   String? _error;
@@ -50,7 +119,7 @@ class _InteractiveMapPageState extends State<InteractiveMapPage>
           : '';
 
       List<List<double>>? pathData;
-      List<MapPin> pins = [];
+      List<PinBase> pins = [];
 
       // Calculer le chemin optimisé
       try {
@@ -87,13 +156,18 @@ class _InteractiveMapPageState extends State<InteractiveMapPage>
 
           // Créer des pins pour chaque POI
           for (int i = 0; i < poiCoordinates.length; i++) {
-            final coord = poiCoordinates[i];
-            if (coord[0] != null && coord[1] != null) {
+            if (i == 0) {
               pins.add(MapPin(
-                x: coord[0]!,
-                y: coord[1]!,
-                label: i == 0 ? 'Départ' : '$i',
-                color: i == 0 ? Colors.green : Colors.red,
+                x: poiCoordinates[i][0]!,
+                y: poiCoordinates[i][1]!,
+                label: 'E',
+                color: Theme.of(context).colorScheme.secondary,
+              ));
+            } else {
+              pins.add(ArticlePin(
+                x: poiCoordinates[i][0]!,
+                y: poiCoordinates[i][1]!,
+                color: Theme.of(context).colorScheme.primary,
               ));
             }
           }
@@ -213,11 +287,21 @@ class _InteractiveMapPageState extends State<InteractiveMapPage>
                               return Stack(
                                 children: _pins.map((pin) {
                                   final screenPos = svgToScreen(pin.x, pin.y);
-                                  return Positioned(
-                                    left: screenPos.dx - 20,
-                                    top: screenPos.dy - 40,
-                                    child: _buildPin(pin),
-                                  );
+                                  if (pin is ArticlePin) {
+                                    // Centrer le cercle sur la position
+                                    return Positioned(
+                                      left: screenPos.dx - 9,
+                                      top: screenPos.dy - 9,
+                                      child: _buildPin(pin),
+                                    );
+                                  } else {
+                                    // MapPin : pointe du triangle exactement sur la position
+                                    return Positioned(
+                                      left: screenPos.dx - 20,
+                                      top: screenPos.dy - 50,
+                                      child: _buildPin(pin),
+                                    );
+                                  }
                                 }).toList(),
                               );
                             },
@@ -340,82 +424,46 @@ class _InteractiveMapPageState extends State<InteractiveMapPage>
     );
   }
 
-  Widget _buildPin(MapPin pin) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(
-            color: pin.color,
-            shape: BoxShape.circle,
-            border: Border.all(color: Colors.white, width: 3),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.3),
-                blurRadius: 6,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Center(
-            child: Text(
-              pin.label,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
+  Widget _buildPin(PinBase pin) {
+    if (pin is MapPin) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: pin.color,
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white, width: 3),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.3),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Center(
+              child: Text(
+                pin.label,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
               ),
             ),
           ),
-        ),
-        // Triangle pointer
-        CustomPaint(
-          size: const Size(10, 10),
-          painter: _TrianglePainter(color: pin.color),
-        ),
-      ],
-    );
+          CustomPaint(
+            size: const Size(10, 10),
+            painter: _TrianglePainter(color: pin.color),
+          ),
+        ],
+      );
+    } else if (pin is ArticlePin) {
+      return buildArticlePin(pin, context);
+    }
+    return const SizedBox.shrink();
   }
-}
-
-// Classe pour représenter un pin sur la carte
-class MapPin {
-  final double x;
-  final double y;
-  final String label;
-  final Color color;
-
-  MapPin({
-    required this.x,
-    required this.y,
-    required this.label,
-    this.color = Colors.red,
-  });
-}
-
-// Painter pour le triangle du pin
-class _TrianglePainter extends CustomPainter {
-  final Color color;
-
-  _TrianglePainter({required this.color});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.fill;
-
-    final path = Path()
-      ..moveTo(size.width / 2, size.height)
-      ..lineTo(0, 0)
-      ..lineTo(size.width, 0)
-      ..close();
-
-    canvas.drawPath(path, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
