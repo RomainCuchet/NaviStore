@@ -24,17 +24,13 @@ class BubblePinProductInfo extends StatelessWidget {
     const double pointerWidth = 28;
     const double margin = 8;
 
-    // Fixed font size, dynamic lines
+    // Fixed font size, max 3 lines
     double nameFontSize = 10;
-    int nameMaxLines = 2;
-    if (productPin.name.length > 18) nameMaxLines = 3;
-    if (productPin.name.length > 28) nameMaxLines = 4;
-
-    // Calculate text height and include price
+    int nameMaxLines = 3;
     double lineHeight = nameFontSize * 1.2;
     double textHeight = lineHeight * nameMaxLines;
     double priceHeight = 18; // Height for price text
-    double verticalPadding = 12; // Top+bottom padding
+    double verticalPadding = 18; // Top+bottom padding (increased for 3 lines)
     double bubbleHeight = textHeight + priceHeight + verticalPadding;
     double minHeight = 56;
     if (bubbleHeight < minHeight) bubbleHeight = minHeight;
@@ -137,7 +133,7 @@ class BubblePinProductInfo extends StatelessWidget {
                                     fontWeight: FontWeight.bold,
                                     fontSize: nameFontSize,
                                   ),
-                                  maxLines: nameMaxLines,
+                                  maxLines: 3,
                                   overflow: TextOverflow.ellipsis,
                                   softWrap: true,
                                 ),

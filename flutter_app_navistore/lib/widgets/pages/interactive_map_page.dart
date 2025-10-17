@@ -6,34 +6,6 @@ import '../../repositories/shopping_list_repository.dart';
 import '../map/map_overlays.dart';
 import '../map/buble_pin_product_info.dart';
 
-class _TrianglePainter extends CustomPainter {
-  final Color color;
-
-  _TrianglePainter({required this.color});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.fill;
-
-    final path = Path()
-      ..moveTo(size.width / 2, size.height)
-      ..lineTo(0, 0)
-      ..lineTo(size.width, 0)
-      ..close();
-
-    canvas.drawPath(path, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-// Widget d'indicateur moderne
-
-// Widget d'indicateur moderne
-
 class InteractiveMapPage extends StatefulWidget {
   final LayoutApiService layoutService;
 
@@ -86,7 +58,7 @@ class _InteractiveMapPageState extends State<InteractiveMapPage>
       List<List<double>>? pathData;
       List<PinBase> pins = [];
 
-      // Calculer le chemin optimisé
+      // Calculate optimized path
       try {
         const List<double> startPoint = [9980.0, 5020.0];
         final rawPositions =
@@ -106,7 +78,7 @@ class _InteractiveMapPageState extends State<InteractiveMapPage>
             includeReturnToStart: true,
           );
 
-          // Stocker la distance totale
+          // Save results
           _totalDistance =
               (result['total_distance'] as num?)?.toDouble() ?? 0.0;
 
@@ -213,16 +185,29 @@ class _InteractiveMapPageState extends State<InteractiveMapPage>
                       } catch (e) {
                         if (mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Échec mise à jour: $e')),
+                            SnackBar(content: Text('Failed to refresh: $e')),
                           );
                         }
                       }
                     },
-                    tooltip: 'Rafraîchir',
+                    tooltip: 'Refresh',
                     icon: const Icon(Icons.refresh, size: 22),
                     splashRadius: 18,
                   ),
-                  const Spacer(),
+                  Expanded(
+                    child: Center(
+                      child: Text(
+                        'Map',
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleMedium
+                            ?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: Theme.of(context).colorScheme.onSurface,
+                            ),
+                      ),
+                    ),
+                  ),
                   // Modern toggle (radio) button for info section
                   AnimatedSwitcher(
                     duration: const Duration(milliseconds: 200),
@@ -447,9 +432,11 @@ class _InteractiveMapPageState extends State<InteractiveMapPage>
                                           _error == null
                                       ? _totalDistance
                                       : 0.0;
-                                  const walkSpeed = 1.2;
+                                  const walkSpeed = 1.2; // meters per second
+                                  const pickProductDuration = 20.0; // seconds
                                   final shoppingTime = distance > 0
-                                      ? (distance / walkSpeed)
+                                      ? (distance / walkSpeed) +
+                                          (availableCount * pickProductDuration)
                                       : 0.0;
 
                                   final width =
@@ -472,7 +459,7 @@ class _InteractiveMapPageState extends State<InteractiveMapPage>
                                     children: [
                                       _IndicatorItem(
                                         icon: Icons.shopping_cart,
-                                        label: 'Produits',
+                                        label: 'Products',
                                         value: '$availableCount / $totalCount',
                                         color: Colors.blue,
                                         labelStyle: labelStyle?.copyWith(
@@ -481,7 +468,7 @@ class _InteractiveMapPageState extends State<InteractiveMapPage>
                                       ),
                                       _IndicatorItem(
                                         icon: Icons.euro,
-                                        label: 'Prix',
+                                        label: 'Price',
                                         value:
                                             '${availablePrice.toStringAsFixed(2)}€',
                                         color: Colors.green,
@@ -491,7 +478,7 @@ class _InteractiveMapPageState extends State<InteractiveMapPage>
                                       ),
                                       _IndicatorItem(
                                         icon: Icons.timer,
-                                        label: 'Temps',
+                                        label: 'Time',
                                         value: shoppingTime > 0
                                             ? '${shoppingTime ~/ 60}min ${(shoppingTime % 60).toStringAsFixed(0)}s'
                                             : '--',

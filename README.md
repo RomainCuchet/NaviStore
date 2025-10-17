@@ -1,5 +1,6 @@
 
 # 🛒 NaviStore – Smarter In-Store Navigation
+![Shopping path simulation](https://i.imgur.com/HFGYCxl.png)
 
 Shopping in a large retail store can quickly become a frustrating experience. Customers often waste time searching for familiar products, wandering through aisles without clear direction, and leaving with a sense of confusion. As a result, many shoppers prefer smaller or already familiar stores — limiting the potential of large retail environments.
 
@@ -8,6 +9,17 @@ The app provides real-time product locations, generates an optimized route to co
 
 👉 For customers: a faster, smoother, and more enjoyable shopping experience.
 👉 For retailers: a powerful tool to improve customer satisfaction, streamline store navigation, and boost engagement with larger retail spaces.
+
+# Api
+## System Overview
+
+NaviStore’s backend is built for scalability and performance, leveraging modern technologies:
+
+- **Docker** for containerized deployment and easy environment management.
+- **Elasticsearch** for advanced, distributed product catalog indexing, with a strong emphasis on full-text search capabilities for fast, relevant product queries.
+- **Path Optimization Algorithms** (A*, Dijkstra, Best-First, TSP via Google OR-Tools) for efficient multi-point navigation and route planning.
+
+This architecture ensures rapid development, robust search capabilities, and optimized in-store navigation, supporting both proof-of-concept and future production deployments.
 
 ## Elastic Search
 Elastic Search is a powerful distributed search engine that perfectly suits our project's needs for several reasons:
@@ -30,8 +42,8 @@ It’s optimized for inclusion in an API documentation site or README — concis
 The **Path Optimization Pipeline** computes the most efficient multi-point navigation routes in complex environments.
 It combines **graph-based pathfinding** (A*, Dijkstra, Best-First) with **Traveling Salesman Problem (TSP)** optimization (Google OR-Tools) to generate minimal-distance routes through all Points of Interest (POIs). Enables to compute the best shopping path within the store layout.
 
-![Shopping path simulation](https://i.imgur.com/GevMQ2x.png)
-*Demo of the Path Optimization simulator*
+![Shopping path simulation](https://i.imgur.com/FTxmcAq.png)
+*Navistore path finding*
 
 **Highlights**
 
@@ -137,14 +149,16 @@ print(response.json()["total_distance"])
 
 
 4. **Scalability**: Built for distributed systems, it can handle growing product catalogs efficiently.
+## Layout Generator
+
+We implemented a fast, hash-based versioning system to efficiently manage store layouts and SVG visualizations. By using **xxHash** (a high-speed, non-cryptographic hash function), we can quickly detect layout changes and avoid unnecessary SVG regeneration. This approach ensures that clients are always synchronized with the latest layout version, while minimizing redundant processing and network usage.
 
 ## Security
 As this application is currently a proof of concept (POC), it is not intended for production deployment at this stage. We have implemented a basic API key system to control access and verify user rights. However, the API currently operates over HTTP, which means API keys are transmitted in plaintext and are not secure.
 
 We recognize the importance of securing API communications with HTTPS and SSL certificates, especially to protect sensitive data and credentials. For this POC, we chose not to implement SSL due to the overhead of certificate management, renewal processes, and the potential variability in SSL policies across different deployment environments or client organizations. When moving towards production or public deployment, enabling HTTPS and robust security measures will be a top priority.
 
-> **Warning for Future Development:**  
-> Implement HTTPS for deployment. Transmitting API keys and sensitive data over HTTP is insecure and exposes users to potential risks. For production deployments, always use SSL certificates and enforce secure connections.
+> ⚠️ Implement HTTPS for deployment. Transmitting API keys and sensitive data over HTTP is insecure and exposes users to potential risks. For production deployments, always use SSL certificates and enforce secure connections.
 
 ## Implementation Notes
 - To delete index in developer mode: `Invoke-RestMethod -Method Delete -Uri "http://localhost:9200/products"`
@@ -155,3 +169,56 @@ We recognize the importance of securing API communications with HTTPS and SSL ce
 - Launch docker desktop
 - run from root: `docker compose up`
 - run in flutter_app_navistore: `flutter run`
+
+# Flutter Application
+
+We developed the application using Flutter to ensure a responsive, cross-platform experience with low latency and consistent performance across devices.
+
+## Product Search
+
+The product search module includes category-based filters, allowing users to quickly locate items of interest.
+
+<img src="https://i.imgur.com/EWbnjde.png" alt="Shopping path simulation" width="32%" style="display:inline-block; margin-right: 8px;"/>
+<img src="https://i.imgur.com/XBBFfvL.png" alt="Shopping path simulation" width="32%" style="display:inline-block; margin-right: 8px;"/>
+<img src="https://i.imgur.com/IGRODWo.png" alt="Shopping path simulation" width="32%" style="display:inline-block;"/>
+
+## Shopping List
+
+Users can create, rename, delete, and manage shopping lists, as well as assign products to specific lists.
+The display of the shopping list can be toggled on or off.
+Lists are synchronized with the database at setup, and any unavailable products are clearly flagged.
+<div align="center">
+<img src="https://i.imgur.com/JwSXv3b.png" alt="Shopping path simulation" width="48%" style="display:inline-block; margin-right: 8px;"/>
+<img src="https://i.imgur.com/3qequ2M.png" alt="Shopping path simulation" width="48%" style="display:inline-block;"/>
+
+<br/>
+<img src="https://i.imgur.com/q0zHKWS.png" alt="Shopping path simulation" width="48" style="display:inline-block; margin-right: 8px;"/>
+<img src="https://i.imgur.com/JzJk8qJ.png" alt="Shopping path simulation" width="48%" style="display:inline-block;"/>
+
+</div>
+
+
+## Map
+
+The map is fully responsive and provides detailed contextual information, including:
+
+- The total number of available products and total products in the selected lists
+- The estimated total cost
+- Astimated shopping duration, calculated from walking distance and average product pickup time.
+
+Product information bubbles dynamically adjust their orientation to avoid overlapping or crossing map borders.  
+<div align="center">
+
+<img src="https://i.imgur.com/o8NQn1r.png" alt="Shopping path simulation" width="32%" style="display:inline-block; margin-right: 8px;"/>
+<img src="https://i.imgur.com/VUoJ0XK.png" alt="Shopping path simulation" width="32%" style="display:inline-block; margin-right: 8px;"/>
+<img src="https://i.imgur.com/DJCbljw.png" alt="Shopping path simulation" width="32%" style="display:inline-block;"/>
+
+</div>
+Directional arrows along the navigation path resize automatically based on the zoom level  
+Users can pan, zoom, and navigate the map freely, and the information panel can be hidden for an uncluttered view.
+<div align="center">
+
+<img src="https://i.imgur.com/3lYJ2vv.png" alt="Shopping path simulation" width="48%" style="display:inline-block; margin-right: 8px;"/>
+<img src="https://i.imgur.com/bXwcFiY.png" alt="Shopping path simulation" width="48%" style="display:inline-block; margin-right: 8px;"/>
+
+</div>

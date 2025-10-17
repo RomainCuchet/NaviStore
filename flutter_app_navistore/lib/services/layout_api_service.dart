@@ -48,7 +48,6 @@ class LayoutApiService {
     bool includeReturnToStart = true,
   }) async {
     final uri = Uri.parse('$baseUrl/path_optimization/optimize_path');
-    print('POI Coordinates: $poiCoordinates');
     final body = jsonEncode({
       'poi_coordinates': poiCoordinates
           .where((pt) => pt.length >= 2 && pt[0] != null && pt[1] != null)

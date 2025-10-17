@@ -146,19 +146,27 @@ class _MyHomePageState extends State<MyHomePage> {
           body: Row(
             children: [
               SafeArea(
-                child: NavigationRail(
-                  extended: constraints.maxWidth >= 600,
-                  destinations: const [
-                    NavigationRailDestination(
-                        icon: Icon(Icons.list), label: Text('Shopping Lists')),
-                    NavigationRailDestination(
-                        icon: Icon(Icons.search), label: Text('Products')),
-                    NavigationRailDestination(
-                        icon: Icon(Icons.map), label: Text('Map')),
-                  ],
-                  selectedIndex: selectedIndex,
-                  onDestinationSelected: (value) =>
-                      setState(() => selectedIndex = value),
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 6, right: 6),
+                  child: NavigationRail(
+                    minWidth: 40,
+                    minExtendedWidth: 140,
+                    extended: constraints.maxWidth >= 600,
+                    selectedIconTheme: const IconThemeData(size: 22),
+                    unselectedIconTheme: const IconThemeData(size: 20),
+                    destinations: const [
+                      NavigationRailDestination(
+                          icon: Icon(Icons.list),
+                          label: Text('Shopping Lists')),
+                      NavigationRailDestination(
+                          icon: Icon(Icons.search), label: Text('Products')),
+                      NavigationRailDestination(
+                          icon: Icon(Icons.map), label: Text('Map')),
+                    ],
+                    selectedIndex: selectedIndex,
+                    onDestinationSelected: (value) =>
+                        setState(() => selectedIndex = value),
+                  ),
                 ),
               ),
               Expanded(

@@ -56,7 +56,7 @@ class _ShoppingListExtendedCardState extends State<ShoppingListExtendedCard> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text("Ddelete the product?"),
+        title: const Text("Delete the product?"),
         content: Text("Do you really want to delete '${product.name}'?"),
         actions: [
           TextButton(
@@ -205,37 +205,7 @@ class _ShoppingListExtendedCardState extends State<ShoppingListExtendedCard> {
                   ),
                 ),
 
-                // Bouton supprimer la liste
-                Positioned(
-                  top: 16,
-                  right: 60,
-                  child: IconButton(
-                    icon: Icon(Icons.delete_outline,
-                        size: 28, color: theme.colorScheme.error),
-                    onPressed: () async {
-                      final confirmed = await showDialog<bool>(
-                        context: context,
-                        builder: (ctx) => AlertDialog(
-                          title: const Text("Delete the list?"),
-                          content: Text(
-                              "Do you really want to delete the list '${widget.shoppingList.name}'?"),
-                          actions: [
-                            TextButton(
-                                onPressed: () => Navigator.of(ctx).pop(false),
-                                child: const Text("Cancel")),
-                            TextButton(
-                                onPressed: () => Navigator.of(ctx).pop(true),
-                                child: const Text("Delete")),
-                          ],
-                        ),
-                      );
-                      if (confirmed == true && widget.onDelete != null) {
-                        widget.onDelete!();
-                        Navigator.of(context).pop();
-                      }
-                    },
-                  ),
-                ),
+                // ...bouton supprimer la liste supprimé...
 
                 // Footer
                 Positioned(
