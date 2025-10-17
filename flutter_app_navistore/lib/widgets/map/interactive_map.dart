@@ -253,13 +253,11 @@ class _InteractiveMapState extends State<InteractiveMap>
 
                     // Overlays synchronisés (pins, etc.)
                     if (widget.overlayBuilder != null)
-                      IgnorePointer(
-                        child: ListenableBuilder(
-                          listenable: _transformationController,
-                          builder: (context, child) {
-                            return widget.overlayBuilder!(_svgToScreen);
-                          },
-                        ),
+                      ListenableBuilder(
+                        listenable: _transformationController,
+                        builder: (context, child) {
+                          return widget.overlayBuilder!(_svgToScreen);
+                        },
                       ),
                   ],
                 );

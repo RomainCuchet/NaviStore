@@ -273,29 +273,30 @@ class _InteractiveMapPageState extends State<InteractiveMapPage>
                                       .toList();
                                   overlays.add(
                                     Positioned.fill(
-                                      child: CustomPaint(
-                                        painter: PathOverlayPainter(
-                                            points: pathPoints, zoom: zoom),
+                                      child: IgnorePointer(
+                                        ignoring: true,
+                                        child: CustomPaint(
+                                          painter: PathOverlayPainter(
+                                              points: pathPoints, zoom: zoom),
+                                        ),
                                       ),
                                     ),
                                   );
                                 }
                                 overlays.addAll(_pins.map((pin) {
                                   final screenPos = svgToScreen(pin.x, pin.y);
-                                  if (pin is RoundPin) {
-                                    return Positioned(
-                                      left: screenPos.dx - 9,
-                                      top: screenPos.dy - 9,
-                                      child: _buildPin(pin),
-                                    );
-                                  } else {
-                                    return Positioned(
-                                      left: screenPos.dx - 20,
-                                      top: screenPos.dy - 50,
-                                      child: _buildPin(pin),
-                                    );
-                                  }
+                                  Widget pinWidget = _buildPin(pin);
+                                  return Positioned(
+                                    left: pin is RoundPin
+                                        ? screenPos.dx - 9
+                                        : screenPos.dx - 20,
+                                    top: pin is RoundPin
+                                        ? screenPos.dy - 9
+                                        : screenPos.dy - 50,
+                                    child: pinWidget,
+                                  );
                                 }));
+                                // The overlay Stack itself is not wrapped in IgnorePointer
                                 return Stack(children: overlays);
                               },
                             ),
@@ -473,7 +474,7 @@ class _InteractiveMapPageState extends State<InteractiveMapPage>
   Widget _buildPin(PinBase pin) {
     if (pin is PointingPin) {
       return GestureDetector(
-        behavior: HitTestBehavior.translucent,
+        behavior: HitTestBehavior.deferToChild,
         onTap: () {
           print('Pin tapped: x=${pin.x}, y=${pin.y}');
         },
@@ -515,7 +516,7 @@ class _InteractiveMapPageState extends State<InteractiveMapPage>
       );
     } else if (pin is RoundPin) {
       return GestureDetector(
-        behavior: HitTestBehavior.translucent,
+        behavior: HitTestBehavior.deferToChild,
         onTap: () {
           print('Pin tapped: x=${pin.x}, y=${pin.y}');
         },
