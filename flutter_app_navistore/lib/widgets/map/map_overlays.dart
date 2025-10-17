@@ -100,9 +100,9 @@ abstract class PinBase {
   const PinBase({required this.x, required this.y, required this.color});
 }
 
-class MapPin extends PinBase {
+class PointingPin extends PinBase {
   final String label;
-  MapPin({
+  PointingPin({
     required double x,
     required double y,
     required this.label,
@@ -110,20 +110,20 @@ class MapPin extends PinBase {
   }) : super(x: x, y: y, color: color);
 }
 
-class ArticlePin extends PinBase {
-  ArticlePin({
+class RoundPin extends PinBase {
+  RoundPin({
     required double x,
     required double y,
     Color color = Colors.blue,
   }) : super(x: x, y: y, color: color);
 }
 
-Widget buildArticlePin(ArticlePin pin, BuildContext context) {
+Widget buildRoundPin(RoundPin pin, BuildContext context) {
   return Container(
     width: 18,
     height: 18,
     decoration: BoxDecoration(
-      color: Theme.of(context).colorScheme.primary,
+      color: pin.color,
       shape: BoxShape.circle,
       border: Border.all(color: Colors.white, width: 3),
       boxShadow: [

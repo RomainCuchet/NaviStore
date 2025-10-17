@@ -123,14 +123,12 @@ class _InteractiveMapPageState extends State<InteractiveMapPage>
           // Créer des pins pour chaque POI
           for (int i = 0; i < poiCoordinates.length; i++) {
             if (i == 0) {
-              pins.add(MapPin(
-                x: poiCoordinates[i][0]!,
-                y: poiCoordinates[i][1]!,
-                label: 'E',
-                color: Theme.of(context).colorScheme.secondary,
-              ));
+              pins.add(RoundPin(
+                  x: poiCoordinates[i][0]!,
+                  y: poiCoordinates[i][1]!,
+                  color: Color.fromARGB(255, 57, 179, 128)));
             } else {
-              pins.add(ArticlePin(
+              pins.add(RoundPin(
                 x: poiCoordinates[i][0]!,
                 y: poiCoordinates[i][1]!,
                 color: Theme.of(context).colorScheme.primary,
@@ -284,7 +282,7 @@ class _InteractiveMapPageState extends State<InteractiveMapPage>
                                 }
                                 overlays.addAll(_pins.map((pin) {
                                   final screenPos = svgToScreen(pin.x, pin.y);
-                                  if (pin is ArticlePin) {
+                                  if (pin is RoundPin) {
                                     return Positioned(
                                       left: screenPos.dx - 9,
                                       top: screenPos.dy - 9,
@@ -473,44 +471,56 @@ class _InteractiveMapPageState extends State<InteractiveMapPage>
 
   // Move _buildPin outside of build method
   Widget _buildPin(PinBase pin) {
-    if (pin is MapPin) {
-      return Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: pin.color,
-              shape: BoxShape.circle,
-              border: Border.all(color: Colors.white, width: 3),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.3),
-                  blurRadius: 6,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Center(
-              child: Text(
-                pin.label,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 12,
+    if (pin is PointingPin) {
+      return GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onTap: () {
+          print('Pin tapped: x=${pin.x}, y=${pin.y}');
+        },
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: pin.color,
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 3),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.3),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Center(
+                child: Text(
+                  pin.label,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
                 ),
               ),
             ),
-          ),
-          CustomPaint(
-            size: const Size(10, 10),
-            painter: _TrianglePainter(color: pin.color),
-          ),
-        ],
+            CustomPaint(
+              size: const Size(10, 10),
+              painter: _TrianglePainter(color: pin.color),
+            ),
+          ],
+        ),
       );
-    } else if (pin is ArticlePin) {
-      return buildArticlePin(pin, context);
+    } else if (pin is RoundPin) {
+      return GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onTap: () {
+          print('Pin tapped: x=${pin.x}, y=${pin.y}');
+        },
+        child: buildRoundPin(pin, context),
+      );
     }
     return const SizedBox.shrink();
   }
