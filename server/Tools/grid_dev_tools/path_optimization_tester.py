@@ -8,7 +8,7 @@ import pygame
 import numpy as np
 import h5py
 import requests
-import json
+import numpy as np
 import random
 import tkinter as tk
 from tkinter import filedialog, messagebox
@@ -16,6 +16,12 @@ import sys
 import os
 from typing import List, Tuple, Optional
 from config import API_CONFIG, VISUAL_CONFIG, OPTIMIZATION_CONFIG
+
+# Ajoute le dossier racine (2 niveaux au-dessus) au PYTHONPATH
+root_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+sys.path.append(root_path)
+
+from api_navimall.path_optimization.utils import real_world_to_grid_coords
 
 # Configuration des couleurs
 COLORS = {
@@ -541,17 +547,23 @@ class PathOptimizationTester:
         # if not self.call_upload_layout_api(file_path):
         #     print("❌ Impossible d'uploader la grille")
         #     return
-
-        # 6. Optimiser chemin
-        optimal_path = self.call_optimize_path_api()
-        if optimal_path:
+        try:
+            # 6. Optimiser chemin
+            optimal_path = self.call_optimize_path_api()
+            optimal_path = (
+                np.array(optimal_path, dtype=np.int32)
+                if optimal_path is not None
+                else None
+            )
+            optimal_path = real_world_to_grid_coords(optimal_path, self.edge_length)
+            optimal_path = [tuple(map(int, pt)) for pt in optimal_path]
             self.optimal_path = optimal_path
             print(f"✅ Test terminé! Chemin optimal avec {len(optimal_path)} points")
             print(f"🔍 Debug: POIs grille: {self.poi_coords_grid[:5]}")
             print(f"🔍 Debug: Chemin grille: {optimal_path[:5]}")
             print("✅ Visualisation du résultat...")
-        else:
-            print("⚠️ Pas de chemin optimal calculé, affichage des POIs seulement")
+        except Exception as e:
+            print("⚠️ Pas de chemin optimal calculé, affichage des POIs seulement:", e)
 
         # 7. Affichage
         clock = pygame.time.Clock()

@@ -19,6 +19,7 @@ from api_navimall.path_optimization.serialization_utils import (
     clean_optimization_response,
     clean_poi_summary,
 )
+from api_navimall.path_optimization.utils import grid_to_real_world_coords
 
 
 logging.basicConfig(level=logging.INFO)
@@ -201,6 +202,24 @@ def _optimize_shopping_path(request: PathOptimizationRequest, user_info: dict):
         request.include_return_to_start
     )
 
+    # Convert grid path to real-world coordinates using centralized utils
+    try:
+        import numpy as np
+
+        # complete_path is a list of (row, col); convert in batch for consistency
+        complete_path_array = np.array(complete_path, dtype=float).reshape(-1, 2)
+        complete_path_real_array = grid_to_real_world_coords(
+            complete_path_array, edge_length
+        )
+        complete_path_real = complete_path_real_array.tolist()
+    except Exception as conv_exc:
+        logger.warning(
+            "Failed batch grid->real conversion, falling back to passthrough: %s",
+            conv_exc,
+        )
+        # Fallback to original points if conversion fails
+        complete_path_real = [list(pt) for pt in complete_path]
+
     total_distance = path_generator.calculate_total_distance()
     computation_time = time.time() - start_time
 
@@ -219,7 +238,7 @@ def _optimize_shopping_path(request: PathOptimizationRequest, user_info: dict):
         "success": True,
         "total_distance": float(total_distance),
         "visiting_order": visiting_order,
-        "complete_path": complete_path,
+        "complete_path": complete_path_real,
         "poi_count": len(poi_coords_real),
         "computation_time": float(computation_time),
         "optimization_stats": optimization_stats,

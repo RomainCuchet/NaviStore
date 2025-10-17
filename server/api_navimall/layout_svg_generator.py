@@ -67,11 +67,16 @@ class LayoutSVGGenerator:
 
         # Calculate SVG dimensions
         height, width = layout_array.shape
-        svg_width = width * edge_length
-        svg_height = height * edge_length
+        # Match solver convention: x derives from row (height), y derives from col (width)
+        svg_width = height * edge_length
+        svg_height = width * edge_length
 
-        logger.info(f"📐 Layout: {width}x{height} cells, {edge_length}cm/cell")
-        logger.info(f"📏 SVG size: {svg_width}x{svg_height}cm")
+        logger.info(
+            f"📐 Layout: width={width} cols, height={height} rows, edge={edge_length}cm"
+        )
+        logger.info(
+            f"📏 SVG size (solver-convention): {svg_width}x{svg_height}cm (x=row, y=col)"
+        )
 
         # Create SVG root element
         svg_root = self._create_svg_root(svg_width, svg_height)
@@ -203,15 +208,15 @@ class LayoutSVGGenerator:
         # Obstacles layer
         layers["obstacles"] = ET.SubElement(svg_root, "g", id="obstacles-layer")
 
-        # Shelves layer (initially hidden)
+        # Shelves layer (visible by default - Flutter strips style/script)
         shelves_layer = ET.SubElement(svg_root, "g", id="shelves-layer")
-        shelves_layer.set("opacity", "0")
+        shelves_layer.set("opacity", "1")
         layers["shelves"] = shelves_layer
 
         # POI layer
         layers["poi"] = ET.SubElement(svg_root, "g", id="poi-layer")
 
-        # Zones layer (initially hidden)
+        # Zones layer (initially hidden; can be toggled later if needed)
         zones_layer = ET.SubElement(svg_root, "g", id="zones-layer")
         zones_layer.set("opacity", "0")
         layers["zones"] = zones_layer
@@ -248,7 +253,6 @@ class LayoutSVGGenerator:
         shelf_shapes = self._find_contiguous_regions(layout_array, 2)
         logger.info(f"🏪 Found {len(shelf_shapes)} shelf regions")
         for i, shape in enumerate(shelf_shapes):
-            logger.info(f"   Shelf {i}: {len(shape)} cells")
             gradient_id = "shelfGradient" if i % 2 == 0 else "shelfGradient2"
             self._create_contiguous_shelf(
                 layers["shelves"], shape, edge_length, i, gradient_id
@@ -256,11 +260,11 @@ class LayoutSVGGenerator:
             stats["total_elements"] += 1
             # stats["animated_elements"] += 1  # Plus d'animation pour les étagères
 
-        # POI (1) - individual markers
+        # POI (1) - individual markers (solver convention: x=row, y=col)
         poi_positions = np.where(layout_array == 1)
         for y, x in zip(poi_positions[0], poi_positions[1]):
             self._create_poi_element(
-                layers["poi"], x * edge_length, y * edge_length, edge_length, x, y
+                layers["poi"], y * edge_length, x * edge_length, edge_length, x, y
             )
             stats["total_elements"] += 1
 
@@ -408,10 +412,11 @@ class LayoutSVGGenerator:
         min_x = min(cell[1] for cell in cells)
         max_x = max(cell[1] for cell in cells)
 
-        x = min_x * edge_length
-        y = min_y * edge_length
-        width = (max_x - min_x + 1) * edge_length
-        height = (max_y - min_y + 1) * edge_length
+        # Swap axes to follow solver convention (x from row/y-index, y from col/x-index)
+        x = min_y * edge_length
+        y = min_x * edge_length
+        width = (max_y - min_y + 1) * edge_length
+        height = (max_x - min_x + 1) * edge_length
 
         # Create rounded rectangle path
         radius = min(edge_length * 0.1, 8)
@@ -442,8 +447,9 @@ class LayoutSVGGenerator:
         boundary_segments = []
 
         for y, x in cells:
-            cell_x = x * edge_length
-            cell_y = y * edge_length
+            # Swap axes: x <- row (y index), y <- col (x index)
+            cell_x = y * edge_length
+            cell_y = x * edge_length
 
             # Check each edge of the cell
             # Top edge
@@ -597,8 +603,9 @@ class LayoutSVGGenerator:
         # Convert zone points to SVG coordinates
         points_str = ""
         for point in zone.points:
-            svg_x = point[0] * edge_length
-            svg_y = point[1] * edge_length
+            # Swap axes: points are (col, row) -> (x=row, y=col)
+            svg_x = point[1] * edge_length
+            svg_y = point[0] * edge_length
             points_str += f"{svg_x},{svg_y} "
 
         # Create zone polygon
@@ -612,8 +619,8 @@ class LayoutSVGGenerator:
         # Add zone label
         if zone.points:
             # Calculate centroid for label placement
-            centroid_x = sum(p[0] for p in zone.points) / len(zone.points) * edge_length
-            centroid_y = sum(p[1] for p in zone.points) / len(zone.points) * edge_length
+            centroid_x = sum(p[1] for p in zone.points) / len(zone.points) * edge_length
+            centroid_y = sum(p[0] for p in zone.points) / len(zone.points) * edge_length
 
             label = ET.SubElement(zone_group, "text")
             label.set("x", str(centroid_x))
@@ -716,6 +723,9 @@ class LayoutSVGGenerator:
         """Save SVG to file with proper formatting."""
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
+        # Remove unsupported elements for Flutter rendering
+        self._strip_unsupported_elements(svg_root)
+
         # Convert to string with pretty formatting
         rough_string = ET.tostring(svg_root, "unicode")
         reparsed = minidom.parseString(rough_string)
@@ -727,6 +737,16 @@ class LayoutSVGGenerator:
 
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(formatted_xml)
+
+    def _strip_unsupported_elements(self, svg_root: ET.Element) -> None:
+        """Remove SVG elements not supported by flutter_svg (<style>, <script>)."""
+        unsupported_tags = {"style", "script"}
+
+        for parent in svg_root.iter():
+            for child in list(parent):
+                tag_name = child.tag.split("}")[-1].lower()
+                if tag_name in unsupported_tags:
+                    parent.remove(child)
 
     def _generate_metadata(
         self,
@@ -749,7 +769,8 @@ class LayoutSVGGenerator:
                 "grid_size": [width, height],
                 "edge_length_cm": edge_length,
                 "total_area_cm2": width * height * edge_length * edge_length,
-                "svg_dimensions_cm": [width * edge_length, height * edge_length],
+                # Swap dimensions to reflect solver mapping on axes
+                "svg_dimensions_cm": [height * edge_length, width * edge_length],
             },
             "element_counts": {
                 "total_grid_elements": grid_stats["total_elements"],
@@ -795,8 +816,8 @@ class LayoutSVGGenerator:
         if len(points) < 3:
             return 0.0
 
-        # Convert to real coordinates
-        real_points = [(p[0] * edge_length, p[1] * edge_length) for p in points]
+        # Convert to real coordinates (swap axes to match solver convention)
+        real_points = [(p[1] * edge_length, p[0] * edge_length) for p in points]
 
         # Shoelace formula
         area = 0.0
@@ -815,7 +836,8 @@ class LayoutSVGGenerator:
         if not points:
             return {"min_x": 0, "min_y": 0, "max_x": 0, "max_y": 0}
 
-        real_points = [(p[0] * edge_length, p[1] * edge_length) for p in points]
+        # Swap axes to match solver convention
+        real_points = [(p[1] * edge_length, p[0] * edge_length) for p in points]
         min_x = min(p[0] for p in real_points)
         max_x = max(p[0] for p in real_points)
         min_y = min(p[1] for p in real_points)
