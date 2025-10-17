@@ -63,14 +63,10 @@ class _ShoppingListsPageState extends State<ShoppingListsPage> {
             return const Center(child: Text('Aucune liste enregistrée'));
           }
 
-          return GridView.builder(
-            padding: const EdgeInsets.all(16),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              crossAxisSpacing: 16,
-              mainAxisSpacing: 16,
-            ),
+          return ListView.separated(
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
             itemCount: lists.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 12),
             itemBuilder: (_, index) {
               final list = lists[index];
               return ShoppingListCard(
