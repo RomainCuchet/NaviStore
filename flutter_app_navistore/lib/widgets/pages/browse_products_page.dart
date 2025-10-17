@@ -165,7 +165,7 @@ class _BrowseProductsPageState extends State<BrowseProductsPage> {
             padding: const EdgeInsets.all(8.0),
             child: TextField(
               decoration: InputDecoration(
-                hintText: "Rechercher un produit...",
+                hintText: "Search for a product...",
                 prefixIcon: const Icon(Icons.search),
                 suffixIcon: searchQuery.isNotEmpty
                     ? IconButton(
@@ -221,7 +221,7 @@ class _BrowseProductsPageState extends State<BrowseProductsPage> {
                       focusNode: focusNode,
                       onEditingComplete: onEditingComplete,
                       decoration: InputDecoration(
-                        hintText: "Sélectionner ou taper une catégorie",
+                        hintText: "Select or type a category",
                         suffixIcon: selectedCategory != null
                             ? IconButton(
                                 icon: const Icon(Icons.clear),

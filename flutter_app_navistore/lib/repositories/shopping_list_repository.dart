@@ -85,6 +85,32 @@ class ShoppingListsRepository {
     return box.values.where((list) => list.showInOtherView).toList();
   }
 
+  static Future<(double, double)> fetchMapPrices() async {
+    final lists = await fetchMapLists();
+    double totalProductsPrice = 0.0;
+    double availableProductsPrice = 0.0;
+    for (var list in lists) {
+      final (listTotal, listAvailable) = await list.getPrices();
+      totalProductsPrice += listTotal;
+      availableProductsPrice += listAvailable;
+    }
+
+    return (totalProductsPrice, availableProductsPrice);
+  }
+
+  /// Fetch the number of available products in the lists where showInOtherView is true
+  static Future<(int, int)> fetchProductCounts() async {
+    final lists = await fetchMapLists();
+    int totalProductsCount = 0;
+    int availableProductsCount = 0;
+    for (var list in lists) {
+      final (total, available) = await list.getProductCounts();
+      totalProductsCount += total;
+      availableProductsCount += available;
+    }
+    return (totalProductsCount, availableProductsCount);
+  }
+
   /// fetch all available products in the lists where showInOtherView is true
   static Future<List<ProductModel>> fetchMapProducts() async {
     final lists = await fetchMapLists();

@@ -111,4 +111,13 @@ class ShoppingListModel extends HiveObject {
 
     return (totalProductsPrice, availableProductsPrice);
   }
+
+  Future<(int, int)> getProductCounts() async {
+    final products = await getProducts();
+
+    int totalProductsCount = products.length;
+    int availableProductsCount = products.where((p) => p.isAvailable).length;
+
+    return (totalProductsCount, availableProductsCount);
+  }
 }
