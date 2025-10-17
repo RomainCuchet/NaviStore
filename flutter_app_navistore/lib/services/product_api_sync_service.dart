@@ -1,6 +1,9 @@
 import 'package:hive/hive.dart';
+
 import '../models/product_model.dart';
 import '../models/shopping_list_model.dart';
+import '../models/product_categories_model.dart';
+
 import '../services/product_api_service.dart';
 
 class ProductApiSyncService {
@@ -8,25 +11,50 @@ class ProductApiSyncService {
 
   ProductApiSyncService(this.api);
 
-  /// Charge et synchronise tous les produits stockés localement avec l'API
-  Future<void> syncProducts(List<ShoppingListModel> lists) async {
-    final allProductsBox = await Hive.openBox<ProductModel>('products');
+  /// Load and synchronize the locally stored product categories with the API
+  Future<void> syncProductCategories() async {
+    try {
+      final categories = await api.fetchCategories();
+      final categoriesModel = ProductCategoriesModel(
+        productCategories: categories,
+      );
+      await ProductCategoriesModel.saveToHive(categoriesModel);
+    } catch (e) {
+      print("❌Error syncing product categories (Api disconnected ?): $e");
+    }
+  }
+
+  /// Load and synchronize all locally stored products with the API
+  Future<void> syncProducts() async {
+    final allProductsBox = Hive.box<ProductModel>('products');
+    final allListsBox = Hive.box<ShoppingListModel>('shopping_lists');
 
     final storedProducts = allProductsBox.values.toList();
 
-    // Récupère tous les IDs des produits utilisés dans les listes
-    final allIdsInLists = lists.expand((l) => l.productIds).toSet();
+    // Get all product IDs used in the lists
+    final allIdsInLists =
+        allListsBox.values.expand((l) => l.productIds).toSet();
 
     try {
-      // Appel API avec List<String>
+      // Fetch only the products that are in the lists
       final fetchedProducts =
           await api.getProductsByIds(allIdsInLists.toList());
 
       final fetchedMap = {for (var p in fetchedProducts) p.id: p};
 
+      // Update availability and position of all stored products according to fetched data
       for (var stored in storedProducts) {
         if (fetchedMap.containsKey(stored.id)) {
-          final updated = fetchedMap[stored.id]!.copyWith(isAvailable: true);
+          final fetched = fetchedMap[stored.id]!;
+          final updated = stored.copyWith(
+            isAvailable: true,
+            name: fetched.name,
+            brand: fetched.brand,
+            category: fetched.category,
+            price: fetched.price,
+            imagePath: fetched.imagePath,
+            position: fetched.position,
+          );
           await updated.saveToHive();
         } else if (allIdsInLists.contains(stored.id)) {
           final updated = stored.copyWith(isAvailable: false);
@@ -34,20 +62,14 @@ class ProductApiSyncService {
         }
       }
 
-      for (var p in fetchedProducts) {
-        if (!storedProducts.any((sp) => sp.id == p.id)) {
-          await p.saveToHive();
-        }
-      }
-
+      // Remove products that are no longer in any list
       for (var stored in storedProducts) {
         if (!allIdsInLists.contains(stored.id)) {
           await stored.deleteFromHive();
         }
       }
     } catch (e) {
-      print(
-          "❌ API offline, les produits existants restent avec isAvailable = false");
+      print("❌Error syncing products (Api disconnected ?): $e");
       for (var stored in storedProducts) {
         if (allIdsInLists.contains(stored.id)) {
           final updated = stored.copyWith(isAvailable: false);
@@ -55,5 +77,10 @@ class ProductApiSyncService {
         }
       }
     }
+  }
+
+  Future<void> fullResync() async {
+    await syncProductCategories();
+    await syncProducts();
   }
 }

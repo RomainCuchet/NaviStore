@@ -1,27 +1,34 @@
 import 'package:flutter/material.dart';
+
 import '../../models/product_model.dart';
-import '../../services/product_api_service.dart';
-import '../../repositories/shopping_list_repository.dart';
 import '../../models/shopping_list_model.dart';
+import '../../models/product_categories_model.dart';
+
+import '../../services/product_api_service.dart';
+
+import '../../repositories/shopping_list_repository.dart';
+
 import '../cards/product_detail_card_browse.dart';
 import '../cards/product_list_card_browse.dart';
 
 class BrowseProductsPage extends StatefulWidget {
-  final ProductApiService api;
+  final ProductApiService productService;
 
-  const BrowseProductsPage({super.key, required this.api});
+  const BrowseProductsPage({super.key, required this.productService});
 
   @override
   State<BrowseProductsPage> createState() => _BrowseProductsPageState();
 }
 
 class _BrowseProductsPageState extends State<BrowseProductsPage> {
-  List<ProductModel> allResults = []; // bruts de l’API
-  List<ProductModel> products = []; // affichés après filtres
+  List<ProductModel> allResults = [];
+  List<ProductModel> filteredResults = [];
   String searchQuery = "";
   String? selectedCategory;
 
-  List<String> availableCategories = [];
+  ProductCategoriesModel categories =
+      ProductCategoriesModel(productCategories: []);
+
   bool isLoadingCategories = true;
 
   bool isLoading = false;
@@ -30,28 +37,20 @@ class _BrowseProductsPageState extends State<BrowseProductsPage> {
   @override
   void initState() {
     super.initState();
-    _loadCategories();
-  }
-
-  Future<void> _loadCategories() async {
-    setState(() => isLoadingCategories = true);
-    try {
-      final categories = await widget.api.fetchCategories();
-      categories.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
-      setState(() => availableCategories = categories);
-    } catch (e) {
-      print("❌ Failed to load categories: $e");
-      setState(() => availableCategories = []);
-    } finally {
-      setState(() => isLoadingCategories = false);
-    }
+    ProductCategoriesModel.getFromHive().then((categories) {
+      setState(() {
+        this.categories = categories;
+      }); // si tu veux rafraîchir l’UI
+    }).catchError((err) {
+      print("Erreur : $err");
+    });
   }
 
   Future<void> loadProducts() async {
     if (searchQuery.isEmpty) {
       setState(() {
         allResults = [];
-        products = [];
+        filteredResults = [];
         errorMessage = null;
       });
       return;
@@ -63,16 +62,17 @@ class _BrowseProductsPageState extends State<BrowseProductsPage> {
     });
 
     try {
-      final fetched = await widget.api.getProducts(title: searchQuery);
+      final fetched =
+          await widget.productService.getProducts(title: searchQuery);
       setState(() {
         allResults = fetched;
         _applyFilters();
-        if (products.isEmpty) errorMessage = "Aucun produit trouvé";
+        if (filteredResults.isEmpty) errorMessage = "Aucun produit trouvé";
       });
     } catch (e) {
       setState(() {
         allResults = [];
-        products = [];
+        filteredResults = [];
         errorMessage = "Erreur lors de la récupération des produits";
       });
       print("❌ API error: $e");
@@ -92,13 +92,13 @@ class _BrowseProductsPageState extends State<BrowseProductsPage> {
     }
 
     setState(() {
-      products = filtered;
-      errorMessage = products.isEmpty ? "Aucun produit trouvé" : null;
+      filteredResults = filtered;
+      errorMessage = filteredResults.isEmpty ? "Aucun produit trouvé" : null;
     });
   }
 
   Future<void> _onProductTap(ProductModel product) async {
-    final repo = ShoppingListRepository();
+    final repo = ShoppingListsRepository();
     final lists = await repo.getAllShoppingLists();
 
     showModalBottomSheet(
@@ -135,6 +135,7 @@ class _BrowseProductsPageState extends State<BrowseProductsPage> {
                 id: DateTime.now().millisecondsSinceEpoch.toString(),
                 name: "Nouvelle liste",
                 productIds: [product.id.toString()],
+                showInOtherView: false,
               );
               await repo.addShoppingList(newList);
 
@@ -154,17 +155,17 @@ class _BrowseProductsPageState extends State<BrowseProductsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Produits"),
+        title: const Text("Products Browser"),
         centerTitle: true,
       ),
       body: Column(
         children: [
-          // Barre de recherche
+          // Search bar
           Padding(
             padding: const EdgeInsets.all(8.0),
             child: TextField(
               decoration: InputDecoration(
-                hintText: "Rechercher un produit...",
+                hintText: "Search for a product...",
                 prefixIcon: const Icon(Icons.search),
                 suffixIcon: searchQuery.isNotEmpty
                     ? IconButton(
@@ -173,7 +174,7 @@ class _BrowseProductsPageState extends State<BrowseProductsPage> {
                           setState(() {
                             searchQuery = "";
                             allResults = [];
-                            products = [];
+                            filteredResults = [];
                             errorMessage = null;
                           });
                         },
@@ -189,22 +190,22 @@ class _BrowseProductsPageState extends State<BrowseProductsPage> {
             ),
           ),
 
-          // Filtre catégorie
+          // Filter by category
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  "Filtrer par catégorie",
+                  "Filter by category:",
                   style: TextStyle(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 4),
                 Autocomplete<String>(
                   optionsBuilder: (textEditingValue) {
                     if (textEditingValue.text.isEmpty)
-                      return availableCategories;
-                    return availableCategories.where((cat) => cat
+                      return categories.productCategories;
+                    return categories.productCategories.where((cat) => cat
                         .toLowerCase()
                         .contains(textEditingValue.text.toLowerCase()));
                   },
@@ -220,7 +221,7 @@ class _BrowseProductsPageState extends State<BrowseProductsPage> {
                       focusNode: focusNode,
                       onEditingComplete: onEditingComplete,
                       decoration: InputDecoration(
-                        hintText: "Sélectionner ou taper une catégorie",
+                        hintText: "Select or type a category",
                         suffixIcon: selectedCategory != null
                             ? IconButton(
                                 icon: const Icon(Icons.clear),
@@ -242,7 +243,7 @@ class _BrowseProductsPageState extends State<BrowseProductsPage> {
             ),
           ),
 
-          // Chip filtre actif
+          // Chip filter active
           if (selectedCategory != null)
             Padding(
               padding: const EdgeInsets.all(8.0),
@@ -262,7 +263,7 @@ class _BrowseProductsPageState extends State<BrowseProductsPage> {
 
           const SizedBox(height: 8),
 
-          // Liste produits
+          // Products list
           Expanded(
             child: isLoading
                 ? const Center(child: CircularProgressIndicator())
@@ -274,9 +275,9 @@ class _BrowseProductsPageState extends State<BrowseProductsPage> {
                         ),
                       )
                     : ListView.builder(
-                        itemCount: products.length,
+                        itemCount: filteredResults.length,
                         itemBuilder: (_, index) {
-                          final product = products[index];
+                          final product = filteredResults[index];
                           return ProductListCardBrowse(
                             product: product,
                             onTap: () {

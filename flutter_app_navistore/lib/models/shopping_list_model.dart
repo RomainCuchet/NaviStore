@@ -1,4 +1,5 @@
 import 'package:hive/hive.dart';
+import 'product_model.dart';
 
 part 'shopping_list_model.g.dart';
 
@@ -14,10 +15,14 @@ class ShoppingListModel extends HiveObject {
   @HiveField(2)
   final List<String> productIds;
 
+  @HiveField(3)
+  bool showInOtherView;
+
   ShoppingListModel({
     required this.id,
     required this.name,
     required this.productIds,
+    this.showInOtherView = false,
   });
 
   factory ShoppingListModel.fromJson(Map<String, dynamic> json) {
@@ -27,6 +32,7 @@ class ShoppingListModel extends HiveObject {
       productIds: (json['productIds'] as List<dynamic>)
           .map((e) => e.toString())
           .toList(),
+      showInOtherView: json['showInOtherView'] as bool? ?? false,
     );
   }
 
@@ -35,21 +41,22 @@ class ShoppingListModel extends HiveObject {
       'id': id,
       'name': name,
       'productIds': productIds,
+      'showInOtherView': showInOtherView,
     };
   }
 
   Future<void> saveToHive() async {
-    final box = await Hive.openBox<ShoppingListModel>('shopping_lists');
+    final box = Hive.box<ShoppingListModel>('shopping_lists');
     await box.put(id, this);
   }
 
   Future<void> deleteFromHive() async {
-    final box = await Hive.openBox<ShoppingListModel>('shopping_lists');
+    final box = Hive.box<ShoppingListModel>('shopping_lists');
     await box.delete(id);
   }
 
   static Future<List<ShoppingListModel>> getAllFromHive() async {
-    final box = await Hive.openBox<ShoppingListModel>('shopping_lists');
+    final box = Hive.box<ShoppingListModel>('shopping_lists');
     return box.values.toList();
   }
 
@@ -71,11 +78,46 @@ class ShoppingListModel extends HiveObject {
   ShoppingListModel copyWith({
     String? name,
     List<String>? productIds,
+    bool? showInOtherView,
   }) {
     return ShoppingListModel(
       id: id,
       name: name ?? this.name,
       productIds: productIds ?? this.productIds,
+      showInOtherView: showInOtherView ?? this.showInOtherView,
     );
+  }
+
+  Future<List<ProductModel>> getProducts() async {
+    final productsBox = Hive.box<ProductModel>('products');
+    List<ProductModel> products = [];
+
+    for (var productId in productIds) {
+      final product = productsBox.get(productId);
+      if (product != null) {
+        products.add(product);
+      }
+    }
+
+    return products;
+  }
+
+  Future<(double, double)> getPrices() async {
+    final products = await getProducts();
+
+    double totalProductsPrice = products.fold(0, (sum, p) => sum + p.price);
+    double availableProductsPrice =
+        products.where((p) => p.isAvailable).fold(0, (sum, p) => sum + p.price);
+
+    return (totalProductsPrice, availableProductsPrice);
+  }
+
+  Future<(int, int)> getProductCounts() async {
+    final products = await getProducts();
+
+    int totalProductsCount = products.length;
+    int availableProductsCount = products.where((p) => p.isAvailable).length;
+
+    return (totalProductsCount, availableProductsCount);
   }
 }

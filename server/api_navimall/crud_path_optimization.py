@@ -152,7 +152,6 @@ def _optimize_shopping_path(request: PathOptimizationRequest, user_info: dict):
     poi_grid_coords = poi_mapper.get_poi_grid_coordinates()
 
     layout_hash, _ = layout_manager.update_svg_if_needed(layout_path)
-    generated_layout_svg = layout_manager.last_svg_updated
 
     try:
         solver = PathfindingSolverFactory.create_solver(
@@ -223,8 +222,6 @@ def _optimize_shopping_path(request: PathOptimizationRequest, user_info: dict):
         "complete_path": complete_path,
         "poi_count": len(poi_coords_real),
         "computation_time": float(computation_time),
-        "generated_layout_svg": generated_layout_svg,
-        "layout_hash": layout_hash,
         "optimization_stats": optimization_stats,
         "path_summary": path_summary,
     }

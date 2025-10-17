@@ -1,12 +1,13 @@
 import 'package:hive/hive.dart';
 import '../models/shopping_list_model.dart';
+import '../models/product_model.dart';
 
-class ShoppingListRepository {
+class ShoppingListsRepository {
   final String _boxName = 'shopping_lists';
 
   /// Ouvre la box Hive
   Future<Box<ShoppingListModel>> _getBox() async {
-    return await Hive.openBox<ShoppingListModel>(_boxName);
+    return Hive.box<ShoppingListModel>(_boxName);
   }
 
   /// Récupérer toutes les listes
@@ -61,5 +62,75 @@ class ShoppingListRepository {
   Future<void> clearAllLists() async {
     final box = await _getBox();
     await box.clear();
+  }
+
+  static Future<void> cleanOrphanedProducts() async {
+    final allLists = await ShoppingListModel.getAllFromHive();
+    final allProductIdsInLists =
+        allLists.expand((list) => list.productIds).toSet();
+
+    final productsBox = Hive.box<ProductModel>('products');
+    final allStoredProducts = productsBox.values.toList();
+
+    for (var product in allStoredProducts) {
+      if (!allProductIdsInLists.contains(product.id)) {
+        await productsBox.delete(product.id);
+      }
+    }
+  }
+
+  /// fetch lists where showInOtherView is true
+  static Future<List<ShoppingListModel>> fetchMapLists() async {
+    final box = Hive.box<ShoppingListModel>('shopping_lists');
+    return box.values.where((list) => list.showInOtherView).toList();
+  }
+
+  static Future<(double, double)> fetchMapPrices() async {
+    final lists = await fetchMapLists();
+    double totalProductsPrice = 0.0;
+    double availableProductsPrice = 0.0;
+    for (var list in lists) {
+      final (listTotal, listAvailable) = await list.getPrices();
+      totalProductsPrice += listTotal;
+      availableProductsPrice += listAvailable;
+    }
+
+    return (totalProductsPrice, availableProductsPrice);
+  }
+
+  /// Fetch the number of available products in the lists where showInOtherView is true
+  static Future<(int, int)> fetchProductCounts() async {
+    final lists = await fetchMapLists();
+    int totalProductsCount = 0;
+    int availableProductsCount = 0;
+    for (var list in lists) {
+      final (total, available) = await list.getProductCounts();
+      totalProductsCount += total;
+      availableProductsCount += available;
+    }
+    return (totalProductsCount, availableProductsCount);
+  }
+
+  /// fetch all available products in the lists where showInOtherView is true
+  static Future<List<ProductModel>> fetchMapProducts() async {
+    final lists = await fetchMapLists();
+    final productIds = lists.expand((list) => list.productIds).toSet();
+
+    final productsBox = Hive.box<ProductModel>('products');
+    return productsBox.values
+        .where((product) =>
+            productIds.contains(product.id) && product.isAvailable == true)
+        .toList();
+  }
+
+  /// Fetch the position of all available products in the lists where showInOtherView is true
+  static Future<List<List<double?>>> fetchProductPositions() async {
+    final products = await fetchMapProducts();
+    final positions = <List<double?>>[];
+
+    for (var product in products) {
+      positions.add(product.position?.map((e) => e as double?).toList() ?? []);
+    }
+    return positions;
   }
 }

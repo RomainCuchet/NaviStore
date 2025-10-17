@@ -1,41 +1,33 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND
 
-part of 'shopping_list_model.dart';
+part of 'product_categories_model.dart';
 
 // **************************************************************************
 // TypeAdapterGenerator
 // **************************************************************************
 
-class ShoppingListModelAdapter extends TypeAdapter<ShoppingListModel> {
+class ProductCategoriesModelAdapter
+    extends TypeAdapter<ProductCategoriesModel> {
   @override
-  final int typeId = 0;
+  final int typeId = 4;
 
   @override
-  ShoppingListModel read(BinaryReader reader) {
+  ProductCategoriesModel read(BinaryReader reader) {
     final numOfFields = reader.readByte();
     final fields = <int, dynamic>{
       for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
     };
-    return ShoppingListModel(
-      id: fields[0] as String,
-      name: fields[1] as String,
-      productIds: (fields[2] as List).cast<String>(),
-      showInOtherView: (fields[3] as bool?) ?? false,
+    return ProductCategoriesModel(
+      productCategories: (fields[0] as List).cast<String>(),
     );
   }
 
   @override
-  void write(BinaryWriter writer, ShoppingListModel obj) {
+  void write(BinaryWriter writer, ProductCategoriesModel obj) {
     writer
-      ..writeByte(4)
-      ..writeByte(0)
-      ..write(obj.id)
       ..writeByte(1)
-      ..write(obj.name)
-      ..writeByte(2)
-      ..write(obj.productIds)
-      ..writeByte(3)
-      ..write(obj.showInOtherView);
+      ..writeByte(0)
+      ..write(obj.productCategories);
   }
 
   @override
@@ -44,7 +36,7 @@ class ShoppingListModelAdapter extends TypeAdapter<ShoppingListModel> {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is ShoppingListModelAdapter &&
+      other is ProductCategoriesModelAdapter &&
           runtimeType == other.runtimeType &&
           typeId == other.typeId;
 }

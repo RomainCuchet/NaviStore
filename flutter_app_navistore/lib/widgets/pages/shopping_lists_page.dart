@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+
 import '../../models/shopping_list_model.dart';
+
 import '../../repositories/shopping_list_repository.dart';
+
 import '../cards/shopping_list_card.dart';
 
 class ShoppingListsPage extends StatefulWidget {
@@ -12,12 +15,12 @@ class ShoppingListsPage extends StatefulWidget {
 }
 
 class _ShoppingListsPageState extends State<ShoppingListsPage> {
-  late ShoppingListRepository repo;
+  late ShoppingListsRepository repo;
 
   @override
   void initState() {
     super.initState();
-    repo = ShoppingListRepository();
+    repo = ShoppingListsRepository();
   }
 
   Future<void> _deleteList(BuildContext context, ShoppingListModel list) async {
@@ -60,14 +63,10 @@ class _ShoppingListsPageState extends State<ShoppingListsPage> {
             return const Center(child: Text('Aucune liste enregistrée'));
           }
 
-          return GridView.builder(
-            padding: const EdgeInsets.all(16),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              crossAxisSpacing: 16,
-              mainAxisSpacing: 16,
-            ),
+          return ListView.separated(
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
             itemCount: lists.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 12),
             itemBuilder: (_, index) {
               final list = lists[index];
               return ShoppingListCard(

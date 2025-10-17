@@ -29,63 +29,42 @@ class _ShoppingListExtendedCardState extends State<ShoppingListExtendedCard> {
   void initState() {
     super.initState();
     _nameController = TextEditingController(text: widget.shoppingList.name);
-    _loadProductsFromHive();
+    _loadProducts();
+    _showInOtherView = widget.shoppingList.showInOtherView;
+    widget.shoppingList.getPrices().then((value) {
+      setState(() {
+        totalAvailable = value.$2;
+        totalAll = value.$1;
+      });
+    });
   }
 
   /// Charge uniquement les produits depuis Hive
-  Future<void> _loadProductsFromHive() async {
-    setState(() => _isLoading = true);
-    try {
-      final allProducts = await ProductModel.getAllFromHive();
-      final productMap = {for (var p in allProducts) p.id: p};
-
-      final listProducts = widget.shoppingList.productIds.map((id) {
-        // Produit trouvé dans Hive
-        return productMap[id] ??
-            ProductModel(
-              id: id,
-              name: "Produit inconnu",
-              price: 0,
-              category: "Inconnu",
-              isAvailable: false,
-            );
-      }).toList();
-
-      setState(() => products = listProducts);
-
-      // Supprime les produits orphelins (non utilisés dans aucune liste)
-      final allLists = await ShoppingListModel.getAllFromHive();
-      final usedIds = allLists.expand((l) => l.productIds).toSet();
-      for (var p in allProducts) {
-        if (!usedIds.contains(p.id)) {
-          await p.deleteFromHive();
-        }
-      }
-    } catch (e) {
-      print("❌ Failed to load products from Hive: $e");
-      setState(() => products = []);
-    } finally {
-      setState(() => _isLoading = false);
-    }
+  Future<void> _loadProducts() async {
+    final loaded = await widget.shoppingList.getProducts();
+    if (!mounted) return;
+    setState(() {
+      products = loaded;
+      _isLoading = false;
+    });
   }
 
-  double get totalAvailable =>
-      products.where((p) => p.isAvailable).fold(0, (sum, p) => sum + p.price);
-  double get totalAll => products.fold(0, (sum, p) => sum + p.price);
+  double totalAvailable = 0;
+  double totalAll = 0;
 
   Future<void> _deleteProduct(ProductModel product) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text("Supprimer le produit ?"),
-        content: Text("Voulez-vous vraiment supprimer '${product.name}' ?"),
+        title: const Text("Delete the product?"),
+        content: Text("Do you really want to delete '${product.name}'?"),
         actions: [
           TextButton(
               onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text("Annuler")),
+              child: const Text("Cancel")),
           TextButton(
               onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text("Supprimer")),
+              child: const Text("Delete")),
         ],
       ),
     );
@@ -94,7 +73,7 @@ class _ShoppingListExtendedCardState extends State<ShoppingListExtendedCard> {
       setState(() => products.remove(product));
 
       // Met à jour la liste Hive
-      final repo = ShoppingListRepository();
+      final repo = ShoppingListsRepository();
       await repo.updateShoppingList(
         widget.shoppingList.copyWith(
           productIds: products.map((p) => p.id).toList(),
@@ -116,7 +95,7 @@ class _ShoppingListExtendedCardState extends State<ShoppingListExtendedCard> {
 
     setState(() => widget.shoppingList.name = newName);
 
-    final repo = ShoppingListRepository();
+    final repo = ShoppingListsRepository();
     await repo.updateShoppingList(
       widget.shoppingList.copyWith(
         name: newName,
@@ -199,8 +178,15 @@ class _ShoppingListExtendedCardState extends State<ShoppingListExtendedCard> {
                           Switch.adaptive(
                             value: _showInOtherView,
                             activeColor: theme.colorScheme.primary,
-                            onChanged: (val) =>
-                                setState(() => _showInOtherView = val),
+                            onChanged: (val) async {
+                              // update UI immediately
+                              setState(() => _showInOtherView = val);
+                              // persist change to model + Hive
+                              widget.shoppingList.showInOtherView = val;
+                              final repo = ShoppingListsRepository();
+                              await repo
+                                  .updateShoppingList(widget.shoppingList);
+                            },
                           ),
                         ],
                       ),
@@ -219,37 +205,7 @@ class _ShoppingListExtendedCardState extends State<ShoppingListExtendedCard> {
                   ),
                 ),
 
-                // Bouton supprimer la liste
-                Positioned(
-                  top: 16,
-                  right: 60,
-                  child: IconButton(
-                    icon: Icon(Icons.delete_outline,
-                        size: 28, color: theme.colorScheme.error),
-                    onPressed: () async {
-                      final confirmed = await showDialog<bool>(
-                        context: context,
-                        builder: (ctx) => AlertDialog(
-                          title: const Text("Supprimer la liste ?"),
-                          content: Text(
-                              "Voulez-vous vraiment supprimer la liste '${widget.shoppingList.name}' ?"),
-                          actions: [
-                            TextButton(
-                                onPressed: () => Navigator.of(ctx).pop(false),
-                                child: const Text("Annuler")),
-                            TextButton(
-                                onPressed: () => Navigator.of(ctx).pop(true),
-                                child: const Text("Supprimer")),
-                          ],
-                        ),
-                      );
-                      if (confirmed == true && widget.onDelete != null) {
-                        widget.onDelete!();
-                        Navigator.of(context).pop();
-                      }
-                    },
-                  ),
-                ),
+                // ...bouton supprimer la liste supprimé...
 
                 // Footer
                 Positioned(

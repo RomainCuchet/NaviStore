@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:namer_app/widgets/pages/interactive_map_page.dart';
 import 'package:provider/provider.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -6,10 +7,18 @@ import 'package:english_words/english_words.dart';
 
 import 'services/product_api_service.dart';
 import 'services/product_api_sync_service.dart';
+import 'services/layout_api_service.dart';
+import 'services/layout_api_sync_service.dart';
+
 import 'widgets/pages/shopping_lists_page.dart';
 import 'widgets/pages/browse_products_page.dart';
+
 import 'models/product_model.dart';
 import 'models/shopping_list_model.dart';
+import 'models/layout_model.dart';
+import 'models/product_categories_model.dart';
+
+import 'repositories/shopping_list_repository.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -19,30 +28,46 @@ Future<void> main() async {
   await Hive.initFlutter();
   Hive.registerAdapter(ProductModelAdapter());
   Hive.registerAdapter(ShoppingListModelAdapter());
+  Hive.registerAdapter(LayoutModelAdapter());
+  Hive.registerAdapter(ProductCategoriesModelAdapter());
 
-  // Ouvre les boxes Hive
-  final shoppingListsBox =
-      await Hive.openBox<ShoppingListModel>('shopping_lists');
+  await Hive.openBox<ShoppingListModel>('shopping_lists');
   await Hive.openBox<ProductModel>('products');
+  await Hive.openBox<ProductCategoriesModel>('product_categories');
+  await Hive.openBox<LayoutModel>('layout');
+  await Hive.openBox<ProductCategoriesModel>('productCategoriesBox');
 
-  // Crée le service API
-  final apiService = ProductApiService(
+  // Create the API services
+  final productApiService = ProductApiService(
+    baseUrl: dotenv.env['API_URL'] ?? 'http://localhost:8000',
+    apiKey: dotenv.env['API_KEY'] ?? '',
+  );
+  final layoutApiService = LayoutApiService(
     baseUrl: dotenv.env['API_URL'] ?? 'http://localhost:8000',
     apiKey: dotenv.env['API_KEY'] ?? '',
   );
 
-  // Synchronisation des produits au démarrage
-  final syncService = ProductApiSyncService(apiService);
-  final allLists = shoppingListsBox.values.toList();
-  await syncService.syncProducts(allLists);
+  // Delete products not in any list
+  ShoppingListsRepository.cleanOrphanedProducts();
+
+  // Synchronize products at startup
+  final productSyncService = ProductApiSyncService(productApiService);
+  await productSyncService.fullResync();
+
+  await LayoutModel.deleteFromHive();
+
+  // Synchronize layout at startup
+  final layoutSyncService = LayoutApiSyncService(api: layoutApiService);
+  await layoutSyncService.syncLayout();
 
   runApp(
     MultiProvider(
       providers: [
-        Provider<ProductApiService>.value(value: apiService),
+        Provider<ProductApiService>.value(value: productApiService),
+        Provider<LayoutApiService>.value(value: layoutApiService),
         ChangeNotifierProvider(create: (_) => MyAppState()),
       ],
-      child: const MyApp(),
+      child: MyApp(),
     ),
   );
 }
@@ -72,7 +97,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'NaviMall',
+      title: 'NaviStore',
       theme: ThemeData(
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(
@@ -98,17 +123,18 @@ class _MyHomePageState extends State<MyHomePage> {
   Widget build(BuildContext context) {
     final productService =
         Provider.of<ProductApiService>(context, listen: false);
+    final layoutService = Provider.of<LayoutApiService>(context, listen: false);
 
     Widget page;
     switch (selectedIndex) {
       case 0:
-        page = const GeneratorPage();
-        break;
-      case 1:
         page = const ShoppingListsPage();
         break;
+      case 1:
+        page = BrowseProductsPage(productService: productService);
+        break;
       case 2:
-        page = BrowseProductsPage(api: productService);
+        page = InteractiveMapPage(layoutService: layoutService);
         break;
       default:
         throw UnimplementedError('No page for $selectedIndex');
@@ -120,19 +146,27 @@ class _MyHomePageState extends State<MyHomePage> {
           body: Row(
             children: [
               SafeArea(
-                child: NavigationRail(
-                  extended: constraints.maxWidth >= 600,
-                  destinations: const [
-                    NavigationRailDestination(
-                        icon: Icon(Icons.home), label: Text('Home')),
-                    NavigationRailDestination(
-                        icon: Icon(Icons.list), label: Text('Shopping Lists')),
-                    NavigationRailDestination(
-                        icon: Icon(Icons.search), label: Text('Products')),
-                  ],
-                  selectedIndex: selectedIndex,
-                  onDestinationSelected: (value) =>
-                      setState(() => selectedIndex = value),
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 6, right: 6),
+                  child: NavigationRail(
+                    minWidth: 40,
+                    minExtendedWidth: 140,
+                    extended: constraints.maxWidth >= 600,
+                    selectedIconTheme: const IconThemeData(size: 22),
+                    unselectedIconTheme: const IconThemeData(size: 20),
+                    destinations: const [
+                      NavigationRailDestination(
+                          icon: Icon(Icons.list),
+                          label: Text('Shopping Lists')),
+                      NavigationRailDestination(
+                          icon: Icon(Icons.search), label: Text('Products')),
+                      NavigationRailDestination(
+                          icon: Icon(Icons.map), label: Text('Map')),
+                    ],
+                    selectedIndex: selectedIndex,
+                    onDestinationSelected: (value) =>
+                        setState(() => selectedIndex = value),
+                  ),
                 ),
               ),
               Expanded(
@@ -145,70 +179,6 @@ class _MyHomePageState extends State<MyHomePage> {
           ),
         );
       },
-    );
-  }
-}
-
-// ---------------- GeneratorPage ----------------
-class GeneratorPage extends StatelessWidget {
-  const GeneratorPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final appState = context.watch<MyAppState>();
-    final pair = appState.current;
-    final icon = appState.favorites.contains(pair)
-        ? Icons.favorite
-        : Icons.favorite_border;
-
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          BigCard(pair: pair),
-          const SizedBox(height: 10),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ElevatedButton.icon(
-                onPressed: () => appState.toggleFavorite(pair),
-                icon: Icon(icon),
-                label: const Text('Like'),
-              ),
-              const SizedBox(width: 10),
-              ElevatedButton(
-                onPressed: () => appState.getNext(),
-                child: const Text('Next'),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class BigCard extends StatelessWidget {
-  const BigCard({super.key, required this.pair});
-  final WordPair pair;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final style = theme.textTheme.displayMedium?.copyWith(
-      color: theme.colorScheme.onPrimary,
-    );
-
-    return Card(
-      color: theme.colorScheme.primary,
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Text(
-          pair.asLowerCase,
-          style: style,
-          semanticsLabel: '${pair.first} ${pair.second}',
-        ),
-      ),
     );
   }
 }

@@ -25,6 +25,9 @@ class ProductModel extends HiveObject {
   @HiveField(6)
   final String imagePath;
 
+  @HiveField(7)
+  final List<double>? position;
+
   ProductModel({
     required this.id,
     required this.name,
@@ -33,6 +36,7 @@ class ProductModel extends HiveObject {
     this.category = '',
     this.price = 0.0,
     this.imagePath = '',
+    this.position = const [-1, -1],
   });
 
   factory ProductModel.fromJson(Map<String, dynamic> json) {
@@ -44,6 +48,9 @@ class ProductModel extends HiveObject {
       price: (json['first_product_price'] as num?)?.toDouble() ?? 0.0,
       imagePath: json['image_url'] ?? '',
       isAvailable: true,
+      position: json['position'] != null
+          ? List<double>.from(json['position'])
+          : const [-1.0, -1.0],
     );
   }
 
@@ -68,6 +75,7 @@ class ProductModel extends HiveObject {
     String? category,
     double? price,
     String? imagePath,
+    List<double>? position,
   }) {
     return ProductModel(
       id: id ?? this.id,
@@ -77,21 +85,22 @@ class ProductModel extends HiveObject {
       category: category ?? this.category,
       price: price ?? this.price,
       imagePath: imagePath ?? this.imagePath,
+      position: position ?? this.position,
     );
   }
 
   Future<void> saveToHive() async {
-    final box = await Hive.openBox<ProductModel>('products');
+    final box = await Hive.box<ProductModel>('products');
     await box.put(id, this);
   }
 
   Future<void> deleteFromHive() async {
-    final box = await Hive.openBox<ProductModel>('products');
+    final box = await Hive.box<ProductModel>('products');
     await box.delete(id);
   }
 
   static Future<List<ProductModel>> getAllFromHive() async {
-    final box = await Hive.openBox<ProductModel>('products');
+    final box = await Hive.box<ProductModel>('products');
     return box.values.toList();
   }
 }
