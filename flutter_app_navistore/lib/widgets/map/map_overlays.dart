@@ -1,5 +1,54 @@
 import 'package:flutter/material.dart';
 
+Widget buildPin(PinBase pin, BuildContext context) {
+  if (pin is ProductPin) {
+    return buildRoundPin(
+        pin, context); // You can customize for ProductPin if needed
+  } else if (pin is RoundPin) {
+    return buildRoundPin(pin, context);
+  } else if (pin is PointingPin) {
+    // Example: build a different widget for PointingPin
+    return Container(
+      width: 22,
+      height: 22,
+      decoration: BoxDecoration(
+        color: pin.color,
+        shape: BoxShape.rectangle,
+        border: Border.all(color: Colors.white, width: 3),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 4,
+            offset: const Offset(0, 1),
+          ),
+        ],
+      ),
+      child: Center(
+        child: Text(pin.label,
+            style: const TextStyle(fontSize: 10, color: Colors.white)),
+      ),
+    );
+  } else {
+    // Default for PinBase
+    return Container(
+      width: 18,
+      height: 18,
+      decoration: BoxDecoration(
+        color: pin.color,
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white, width: 3),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 4,
+            offset: const Offset(0, 1),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 // Painter pour le chemin optimisé avec triangles directionnels
 class PathOverlayPainter extends CustomPainter {
   final List<Offset> points;
@@ -114,6 +163,21 @@ class RoundPin extends PinBase {
   RoundPin({
     required double x,
     required double y,
+    Color color = Colors.blue,
+  }) : super(x: x, y: y, color: color);
+}
+
+class ProductPin extends RoundPin {
+  final String imagePath;
+  final String name;
+  final double price;
+
+  ProductPin({
+    required double x,
+    required double y,
+    required this.imagePath,
+    required this.name,
+    required this.price,
     Color color = Colors.blue,
   }) : super(x: x, y: y, color: color);
 }

@@ -4,6 +4,7 @@ import '../../models/layout_model.dart';
 import '../map/interactive_map.dart';
 import '../../repositories/shopping_list_repository.dart';
 import '../map/map_overlays.dart';
+import '../map/buble_pin_product_info.dart';
 
 class _TrianglePainter extends CustomPainter {
   final Color color;
@@ -45,7 +46,10 @@ class InteractiveMapPage extends StatefulWidget {
 
 class _InteractiveMapPageState extends State<InteractiveMapPage>
     with AutomaticKeepAliveClientMixin<InteractiveMapPage> {
+  ProductPin? _selectedProductPin;
+  Offset? _selectedPinScreenPos;
   bool _showInfoBar = true;
+
   @override
   bool get wantKeepAlive => true;
 
@@ -120,17 +124,19 @@ class _InteractiveMapPageState extends State<InteractiveMapPage>
             }).toList();
           }
 
-          // Créer des pins pour chaque POI
+          // Créer des ProductPin pour chaque POI sauf le point de départ
           for (int i = 0; i < poiCoordinates.length; i++) {
             if (i == 0) {
-              pins.add(RoundPin(
-                  x: poiCoordinates[i][0]!,
-                  y: poiCoordinates[i][1]!,
-                  color: Color.fromARGB(255, 57, 179, 128)));
+              pins.add(
+                  RoundPin(x: poiCoordinates[i][0]!, y: poiCoordinates[i][1]!));
             } else {
-              pins.add(RoundPin(
+              pins.add(ProductPin(
                 x: poiCoordinates[i][0]!,
                 y: poiCoordinates[i][1]!,
+                imagePath:
+                    'assets/products_images/product_${i}.png', // adapt as needed
+                name: 'Produit ${i}',
+                price: 9.99 + i, // example price
                 color: Theme.of(context).colorScheme.primary,
               ));
             }
@@ -285,17 +291,53 @@ class _InteractiveMapPageState extends State<InteractiveMapPage>
                                 }
                                 overlays.addAll(_pins.map((pin) {
                                   final screenPos = svgToScreen(pin.x, pin.y);
-                                  Widget pinWidget = _buildPin(pin);
                                   return Positioned(
-                                    left: pin is RoundPin
-                                        ? screenPos.dx - 9
-                                        : screenPos.dx - 20,
-                                    top: pin is RoundPin
-                                        ? screenPos.dy - 9
-                                        : screenPos.dy - 50,
-                                    child: pinWidget,
+                                    left: screenPos.dx - 9,
+                                    top: screenPos.dy - 9,
+                                    child: GestureDetector(
+                                      behavior: HitTestBehavior.translucent,
+                                      onTap: () {
+                                        setState(() {
+                                          if (pin is ProductPin) {
+                                            _selectedProductPin = pin;
+                                            _selectedPinScreenPos = screenPos;
+                                          } else {
+                                            _selectedProductPin = null;
+                                            _selectedPinScreenPos = null;
+                                          }
+                                        });
+                                      },
+                                      child: buildPin(pin, context),
+                                    ),
                                   );
                                 }));
+                                // Overlay for selected ProductPin
+                                if (_selectedProductPin != null &&
+                                    _selectedPinScreenPos != null) {
+                                  overlays.add(
+                                    Positioned(
+                                      left: _selectedPinScreenPos!.dx,
+                                      top: _selectedPinScreenPos!.dy - 90,
+                                      child: BubblePinProductInfo(
+                                          productPin: _selectedProductPin!),
+                                    ),
+                                  );
+                                }
+                                // Dismiss overlay on outside tap (except navigation)
+                                overlays = [
+                                  GestureDetector(
+                                    behavior: HitTestBehavior.translucent,
+                                    onTap: () {
+                                      if (_selectedProductPin != null) {
+                                        setState(() {
+                                          _selectedProductPin = null;
+                                          _selectedPinScreenPos = null;
+                                        });
+                                      }
+                                    },
+                                    child: Stack(children: overlays),
+                                  ),
+                                ];
                                 // The overlay Stack itself is not wrapped in IgnorePointer
                                 return Stack(children: overlays);
                               },
@@ -520,7 +562,15 @@ class _InteractiveMapPageState extends State<InteractiveMapPage>
         onTap: () {
           print('Pin tapped: x=${pin.x}, y=${pin.y}');
         },
-        child: buildRoundPin(pin, context),
+        child: buildRoundPin(pin as ProductPin, context),
+      );
+    } else if (pin is ProductPin) {
+      return GestureDetector(
+        behavior: HitTestBehavior.deferToChild,
+        onTap: () {
+          print('Pin tapped: x=${pin.x}, y=${pin.y}');
+        },
+        child: buildPin(pin, context),
       );
     }
     return const SizedBox.shrink();
