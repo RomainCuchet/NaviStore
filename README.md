@@ -43,7 +43,6 @@ The **Path Optimization Pipeline** computes the most efficient multi-point navig
 It combines **graph-based pathfinding** (A*, Dijkstra, Best-First) with **Traveling Salesman Problem (TSP)** optimization (Google OR-Tools) to generate minimal-distance routes through all Points of Interest (POIs). Enables to compute the best shopping path within the store layout.
 
 ![Shopping path simulation](https://i.imgur.com/FTxmcAq.png)
-*Navistore path finding*
 
 **Highlights**
 
@@ -177,10 +176,11 @@ We developed the application using Flutter to ensure a responsive, cross-platfor
 ## Product Search
 
 The product search module includes category-based filters, allowing users to quickly locate items of interest.
-
+<div align="center">
 <img src="https://i.imgur.com/EWbnjde.png" alt="Shopping path simulation" width="32%" style="display:inline-block; margin-right: 8px;"/>
 <img src="https://i.imgur.com/XBBFfvL.png" alt="Shopping path simulation" width="32%" style="display:inline-block; margin-right: 8px;"/>
 <img src="https://i.imgur.com/IGRODWo.png" alt="Shopping path simulation" width="32%" style="display:inline-block;"/>
+</div>
 
 ## Shopping List
 
@@ -192,7 +192,7 @@ Lists are synchronized with the database at setup, and any unavailable products 
 <img src="https://i.imgur.com/3qequ2M.png" alt="Shopping path simulation" width="48%" style="display:inline-block;"/>
 
 <br/>
-<img src="https://i.imgur.com/q0zHKWS.png" alt="Shopping path simulation" width="48" style="display:inline-block; margin-right: 8px;"/>
+<img src="https://i.imgur.com/q0zHKWS.png" alt="Shopping path simulation" width="48%" style="display:inline-block; margin-right: 8px;"/>
 <img src="https://i.imgur.com/JzJk8qJ.png" alt="Shopping path simulation" width="48%" style="display:inline-block;"/>
 
 </div>
