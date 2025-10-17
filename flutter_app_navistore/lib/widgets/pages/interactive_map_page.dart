@@ -124,26 +124,30 @@ class _InteractiveMapPageState extends State<InteractiveMapPage>
             }).toList();
           }
 
-          // Créer des ProductPin pour chaque POI sauf le point de départ
-          for (int i = 0; i < poiCoordinates.length; i++) {
-            if (i == 0) {
-              pins.add(
-                  RoundPin(x: poiCoordinates[i][0]!, y: poiCoordinates[i][1]!));
-            } else {
+          // add starting point pin
+          pins.add(
+              RoundPin(x: poiCoordinates[0][0]!, y: poiCoordinates[0][1]!));
+        }
+
+        //create pins for products
+        ShoppingListsRepository.fetchMapProducts().then((products) {
+          for (var i = 0; i < products.length; i++) {
+            final product = products[i];
+            final pos = product.position;
+            if (pos != null && pos.length >= 2) {
               pins.add(ProductPin(
-                x: poiCoordinates[i][0]!,
-                y: poiCoordinates[i][1]!,
-                imagePath:
-                    'assets/products_images/product_${i}.png', // adapt as needed
-                name: 'Produit ${i}',
-                price: 9.99 + i, // example price
+                x: pos[0].toDouble(),
+                y: pos[1].toDouble(),
+                imagePath: product.imagePath ?? '',
+                name: product.name,
+                price: product.price,
                 color: Theme.of(context).colorScheme.primary,
               ));
             }
           }
-        }
+        });
       } catch (e) {
-        _pathError = 'Chemin non disponible: $e';
+        _pathError = 'Unavailable path: $e';
       }
 
       setState(() {
@@ -155,7 +159,7 @@ class _InteractiveMapPageState extends State<InteractiveMapPage>
       });
     } catch (e) {
       setState(() {
-        _error = 'Erreur de chargement du plan: $e';
+        _error = 'Error loading map: $e';
         _baseSvg = '';
         _loading = false;
       });
