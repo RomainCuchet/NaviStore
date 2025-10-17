@@ -319,11 +319,16 @@ class _InteractiveMapPageState extends State<InteractiveMapPage>
                                 if (_selectedProductPin != null &&
                                     _selectedPinScreenPos != null) {
                                   overlays.add(
-                                    Positioned(
-                                      left: _selectedPinScreenPos!.dx,
-                                      top: _selectedPinScreenPos!.dy - 90,
-                                      child: BubblePinProductInfo(
-                                          productPin: _selectedProductPin!),
+                                    BubblePinProductInfo(
+                                      productPin: _selectedProductPin!,
+                                      pinScreenPos: _selectedPinScreenPos!,
+                                      screenSize: MediaQuery.of(context).size,
+                                      onClose: () {
+                                        setState(() {
+                                          _selectedProductPin = null;
+                                          _selectedPinScreenPos = null;
+                                        });
+                                      },
                                     ),
                                   );
                                 }
