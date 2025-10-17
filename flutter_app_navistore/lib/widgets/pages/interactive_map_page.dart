@@ -4,6 +4,98 @@ import '../../models/layout_model.dart';
 import '../common/interactive_map.dart';
 import '../../repositories/shopping_list_repository.dart';
 
+// Painter pour le chemin optimisé avec triangles directionnels
+class PathOverlayPainter extends CustomPainter {
+  final List<Offset> points;
+  final double zoom;
+  PathOverlayPainter({required this.points, required this.zoom});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (points.length < 2) return;
+    final pathWidth = (4.0 * zoom).clamp(2.0, 16.0);
+    final triangleSize = (10.0 * zoom).clamp(8.0, 30.0);
+    final triangleSpacing = (60.0 * zoom).clamp(30.0, 120.0);
+
+    final pathPaint = Paint()
+      ..color = const Color(0xFF1E88E5)
+      ..strokeWidth = pathWidth
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..isAntiAlias = true;
+
+    final trianglePaint = Paint()
+      ..color = const Color(0xFF1E88E5)
+      ..style = PaintingStyle.fill;
+
+    // Dessiner la ligne du chemin
+    final path = Path();
+    path.moveTo(points[0].dx, points[0].dy);
+    for (final pt in points.skip(1)) {
+      path.lineTo(pt.dx, pt.dy);
+    }
+    canvas.drawPath(path, pathPaint);
+
+    // Dessiner les triangles directionnels à intervalle régulier sur la polyline
+    double totalLength = 0.0;
+    List<double> segLengths = [];
+    for (int i = 1; i < points.length; i++) {
+      final segLen = (points[i] - points[i - 1]).distance;
+      segLengths.add(segLen);
+      totalLength += segLen;
+    }
+    // Calculer la direction de chaque segment
+    List<double> directions = [];
+    for (int i = 1; i < points.length; i++) {
+      directions.add((points[i] - points[i - 1]).direction);
+    }
+    for (double d = triangleSpacing; d < totalLength; d += triangleSpacing) {
+      double acc = 0.0;
+      int segIdx = 0;
+      while (segIdx < segLengths.length && acc + segLengths[segIdx] < d) {
+        acc += segLengths[segIdx];
+        segIdx++;
+      }
+      if (segIdx >= segLengths.length) break;
+      final p0 = points[segIdx];
+      final p1 = points[segIdx + 1];
+      final seg = p1 - p0;
+      final segLen = segLengths[segIdx];
+      final t = (d - acc) / segLen;
+      final pos = Offset(p0.dx + seg.dx * t, p0.dy + seg.dy * t);
+      final angle = seg.direction;
+      _drawTriangle(canvas, pos, angle, triangleSize, trianglePaint);
+    }
+    // Triangle au début
+    if (directions.isNotEmpty) {
+      _drawTriangle(
+          canvas, points[0], directions[0], triangleSize, trianglePaint);
+      _drawTriangle(
+          canvas, points.last, directions.last, triangleSize, trianglePaint);
+    }
+  }
+
+  void _drawTriangle(
+      Canvas canvas, Offset pos, double angle, double size, Paint paint) {
+    final path = Path();
+    path.moveTo(0, 0);
+    path.lineTo(-size / 2, -size);
+    path.lineTo(size / 2, -size);
+    path.close();
+    canvas.save();
+    canvas.translate(pos.dx, pos.dy);
+    canvas.rotate(angle + 1.5708);
+    canvas.drawPath(path, paint);
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant PathOverlayPainter oldDelegate) {
+    return oldDelegate.points != points || oldDelegate.zoom != zoom;
+  }
+}
+
 // Classe de base abstraite pour tous les pins
 abstract class PinBase {
   final double x;
@@ -138,7 +230,7 @@ class _InteractiveMapPageState extends State<InteractiveMapPage>
         if (poiCoordinates.length >= 2) {
           final result = await widget.layoutService.optimizePath(
             poiCoordinates: poiCoordinates,
-            includeReturnToStart: false,
+            includeReturnToStart: true,
           );
 
           if ((result['success'] == true) && result['complete_path'] is List) {
@@ -200,7 +292,7 @@ class _InteractiveMapPageState extends State<InteractiveMapPage>
 <!-- Optimized Path Overlay -->
 <g id="optimized-path">
   <polyline points="$points" fill="none" stroke="#1E88E5" stroke-opacity="0.35" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
-  <polyline points="$points" fill="none" stroke="#64B5F6" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <polyline points="$points" fill="none" stroke="#6f65ad" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
 </g>
 ''';
 
@@ -284,26 +376,43 @@ class _InteractiveMapPageState extends State<InteractiveMapPage>
                                 Theme.of(context).colorScheme.surfaceVariant,
                             // Builder pour les overlays (pins)
                             overlayBuilder: (svgToScreen) {
-                              return Stack(
-                                children: _pins.map((pin) {
-                                  final screenPos = svgToScreen(pin.x, pin.y);
-                                  if (pin is ArticlePin) {
-                                    // Centrer le cercle sur la position
-                                    return Positioned(
-                                      left: screenPos.dx - 9,
-                                      top: screenPos.dy - 9,
-                                      child: _buildPin(pin),
-                                    );
-                                  } else {
-                                    // MapPin : pointe du triangle exactement sur la position
-                                    return Positioned(
-                                      left: screenPos.dx - 20,
-                                      top: screenPos.dy - 50,
-                                      child: _buildPin(pin),
-                                    );
-                                  }
-                                }).toList(),
-                              );
+                              // Récupérer le niveau de zoom
+                              final zoom =
+                                  1.0; // TODO: récupérer le vrai zoom depuis InteractiveMap
+                              List<Widget> overlays = [];
+                              // Overlay du chemin
+                              if (_optimizedPath != null &&
+                                  _optimizedPath!.length > 1) {
+                                final pathPoints = _optimizedPath!
+                                    .map((pt) => svgToScreen(pt[0], pt[1]))
+                                    .toList();
+                                overlays.add(
+                                  Positioned.fill(
+                                    child: CustomPaint(
+                                      painter: PathOverlayPainter(
+                                          points: pathPoints, zoom: zoom),
+                                    ),
+                                  ),
+                                );
+                              }
+                              // Overlay des pins
+                              overlays.addAll(_pins.map((pin) {
+                                final screenPos = svgToScreen(pin.x, pin.y);
+                                if (pin is ArticlePin) {
+                                  return Positioned(
+                                    left: screenPos.dx - 9,
+                                    top: screenPos.dy - 9,
+                                    child: _buildPin(pin),
+                                  );
+                                } else {
+                                  return Positioned(
+                                    left: screenPos.dx - 20,
+                                    top: screenPos.dy - 50,
+                                    child: _buildPin(pin),
+                                  );
+                                }
+                              }));
+                              return Stack(children: overlays);
                             },
                           ),
 
