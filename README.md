@@ -1,6 +1,6 @@
-
 # 🛒 NaviStore – Smarter In-Store Navigation
-![Shopping path simulation](https://i.imgur.com/HFGYCxl.png)
+[![NaviStore POC](https://i.imgur.com/HFGYCxl.png)](https://youtube.com/shorts/JykYEFJG9ow?feature=share)
+*Click the image to open the demo on YouTube.*
 
 Shopping in a large retail store can quickly become a frustrating experience. Customers often waste time searching for familiar products, wandering through aisles without clear direction, and leaving with a sense of confusion. As a result, many shoppers prefer smaller or already familiar stores — limiting the potential of large retail environments.
 
